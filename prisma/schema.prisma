@@ -13,20 +13,269 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id            String    @id
+
+// ==================
+// Enums
+// ==================
+
+enum ROLE {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+enum ORDER_STATUS {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum USER_STATUS {
+  ACTIVE
+  BANNED
+  SUSPENDED
+}
+
+enum PAYMENT_METHOD {
+  CASH_ON_DELIVERY
+}
+
+// ==================
+// Orders & Order Items
+// ==================
+
+model Order {
+  id            String         @id @default(cuid())
+  orderNumber   String         @unique
+  userId        String
+  addressId     String
+  status        ORDER_STATUS   @default(PENDING)
+  paymentMethod PAYMENT_METHOD @default(CASH_ON_DELIVERY)
+  
+  subtotal       Float
+  deliveryCharge Float          @default(0)
+  discount       Float          @default(0)
+  total          Float
+  
+  customerNote  String?
+  cancelReason  String?
+  deliveredAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user       Users       @relation(fields: [userId], references: [id])
+  address    Address     @relation(fields: [addressId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  medicineId String
+  quantity   Int
+  price      Float    // Price at time of order
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id])
+
+  @@index([orderId])
+}
+// ==================
+// Categories & Medicines
+// ==================
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  image       String?
+  isActive    Boolean    @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  medicines Medicine[]
+
+  @@index([slug])
+}
+
+model Medicine {
+  id                  String          @id @default(cuid())
+  name                String
+  slug                String          @unique
+  description         String
+  genericName         String?
+  manufacturer        String
+  categoryId          String
+  sellerId            String
+  price               Float
+  discountPrice       Float?
+  stock               Int             @default(0)
+  dosageForm          String?         // Tablet, Capsule, Syrup, etc.
+  strength            String?         // 500mg, 10ml, etc.
+  prescriptionRequired Boolean        @default(false)
+  image               String?
+  images              String[]        // Array of image URLs
+  isActive            Boolean         @default(true)
+  isFeatured          Boolean         @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  category     Category       @relation(fields: [categoryId], references: [id])
+  seller       SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  orderItems   OrderItem[]
+  reviews      Review[]
+  cartItems    CartItem[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([sellerId])
+  @@index([isActive])
+}
+
+
+// ==================
+// Cart Item
+// ==================
+
+model CartItem {
+  id         String   @id @default(cuid())
+  userId     String
+  medicineId String
+  quantity   Int      @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user     Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, medicineId])
+  @@index([userId])
+}
+
+// ==================
+// Reviews
+// ==================
+
+model Review {
+  id         String   @id @default(cuid())
+  userId     String
+  medicineId String
+  orderId    String?   // Optional: link to order for verification
+  rating     Int       // 1-5 stars
+  comment    String?
+  isVerified Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user     Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, medicineId])
+  @@index([medicineId])
+  @@index([rating])
+}
+
+// ==================
+// Address
+// ==================
+
+model Address {
+  id          String   @id @default(cuid())
+  userId      String
+  fullName    String
+  label       String?    // Home, Office, etc.
+  phone       String
+  country     String     @default("Bangladesh")
+  city        String
+  state       String
+  area        String?
+  postalCode  String
+  addressLine String
+  isDefault   Boolean    @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId])
+}
+
+// ==================
+// Users & SellerProfile
+// ==================
+
+model Users {
+  id            String          @id @default(cuid())
   name          String
-  email         String
-  emailVerified Boolean   @default(false)
+  email         String          @unique
+  emailVerified Boolean         @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  phone         String?
+  role          ROLE            @default(CUSTOMER)
+  status        USER_STATUS     @default(ACTIVE)
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  addresses     Address[]
+  order         Order[]
+  cart          CartItem[]
+  reviews       Review[]
+  sellerProfile SellerProfile?
   sessions      Session[]
   accounts      Account[]
 
-  @@unique([email])
+  @@index([role])
   @@map("user")
 }
+
+model SellerProfile {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  shopName        String
+  shopDescription String?
+  shopLogo        String?
+  licenseNumber   String?    @unique
+  isVerified      Boolean    @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      Users?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicines Medicine[]
+
+  @@index([userId])
+}
+
+// ==================
+// Sessions & Accounts
+// ==================
 
 model Session {
   id        String   @id
@@ -37,19 +286,21 @@ model Session {
   ipAddress String?
   userAgent String?
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([token])
   @@index([userId])
   @@map("session")
 }
 
+
+
 model Account {
   id                    String    @id
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  Users      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -64,13 +315,16 @@ model Account {
   @@map("account")
 }
 
+
+
 model Verification {
   id         String   @id
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([identifier])
   @@map("verification")

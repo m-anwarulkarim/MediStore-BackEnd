@@ -29,5 +29,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "extends": []
+  "extends": [],
+  "include": ["src", "src/types"]
 }

@@ -1,16 +1,12 @@
 // src/server.ts
-import express, {
-  type NextFunction,
-  type Request,
-  type Response,
-} from "express";
+import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 
 import { env } from "./config/env";
 import { auth } from "./lib/auth";
 import { userRouter } from "./module/auth/auth.route";
-import { generateOrderNumber } from "./ui/generateOrderNumber"; // যদি পরে লাগবে
 
 const app = express();
 

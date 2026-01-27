@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "bun --watch src/server.ts",
     "build": "tsc",
-    "start": "bun dist/server.js"
+    "start": "bun dist/server.js",
+    "seed:admin": "bun run src/lib/seedAdmin.ts"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/bun": "latest"
   },
   "peerDependencies": {
@@ -22,6 +24,7 @@
     "@types/node": "^25.0.10",
     "@types/nodemailer": "^7.0.9",
     "@types/pg": "^8.16.0",
+    "bcryptjs": "^3.0.3",
     "better-auth": "^1.4.17",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",

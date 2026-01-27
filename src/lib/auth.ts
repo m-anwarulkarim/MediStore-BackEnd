@@ -73,9 +73,9 @@ export const auth = betterAuth({
           `,
         });
 
-        console.log("✅ Verification email sent successfully:", info.messageId);
+        console.log(" Verification email sent successfully:", info.messageId);
       } catch (error) {
-        console.error("❌ Failed to send verification email:", error);
+        console.error(" Failed to send verification email:", error);
         throw error; // Important: throw error so better-auth can handle it
       }
     },

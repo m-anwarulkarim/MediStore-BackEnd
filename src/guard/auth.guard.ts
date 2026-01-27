@@ -23,8 +23,13 @@ const authGuard = (...allowedRoles: ROLE[]) => {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
       });
-      console.log(user);
-
+      // console.log(user);
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "User not found",
+        });
+      }
       // Verify user account is active (not banned, suspended, or deleted)
       if (user?.status !== USER_STATUS.ACTIVE) {
         return res.status(403).json({

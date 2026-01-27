@@ -7,6 +7,8 @@ import { toNodeHandler } from "better-auth/node";
 import { env } from "./config/env";
 import { auth } from "./lib/auth";
 import { userRouter } from "./module/auth/auth.route";
+import { medicineRouter } from "./module/medicine/medicine.route";
+import { OrderRouter } from "./module/order/orders.route";
 
 const app = express();
 
@@ -26,7 +28,11 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 app.use(express.json());
 
 // ------------------- Routes -------------------
-app.use("/api/v1", userRouter.router);
+app.use("/api", userRouter);
+
+app.use("/api/medicines", medicineRouter);
+app.use("/api/orders", OrderRouter);
+app.use("/api/seller", OrderRouter);
 
 app.get("/", async (req: Request, res: Response) => {
   return res.status(200).json({

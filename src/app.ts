@@ -1,27 +1,62 @@
-import express from "express";
-import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
-import { auth } from "./lib/auth";
+// src/server.ts
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import cors from "cors";
+import { toNodeHandler } from "better-auth/node";
 
-export const app = express();
+import { env } from "./config/env";
+import { auth } from "./lib/auth";
+import { userRouter } from "./module/auth/auth.route";
+import { generateOrderNumber } from "./ui/generateOrderNumber"; // যদি পরে লাগবে
+
+const app = express();
+
+// ------------------- CORS -------------------
 app.use(
   cors({
-    origin: "http://localhost:3000", // Replace with your frontend's origin
-    methods: ["GET", "POST", "PUT", "DELETE"], // Specify allowed HTTP methods
-    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+    origin: env.FRONT_END_URL,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
   }),
 );
 
-app.all("/api/auth/*splat", toNodeHandler(auth)); // For ExpressJS v4
-// app.all("/api/auth/*splat", toNodeHandler(auth)); For ExpressJS v5
+// ------------------- Better Auth -------------------
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
-// Mount express json middleware after Better Auth handler
-// or only apply it to routes that don't interact with Better Auth
+// ------------------- Body Parser -------------------
 app.use(express.json());
 
-app.get("/api/me", async (req, res) => {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
+// ------------------- Routes -------------------
+app.use("/api/v1", userRouter.router);
+
+app.get("/", async (req: Request, res: Response) => {
+  return res.status(200).json({
+    success: true,
+    message: "API is running",
+    timestamp: new Date().toLocaleString("en-BD", {
+      timeZone: "Asia/Dhaka",
+      hour12: false, // 24-hour format
+    }),
   });
-  return res.json(session);
 });
+
+// ------------------- Catch-all Route -------------------
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const localTime = new Date().toLocaleString("en-BD", {
+    timeZone: "Asia/Dhaka",
+    hour12: false,
+  });
+
+  return res.status(404).json({
+    success: false,
+    message: "Route not found",
+    path: req.path,
+    timestamp: localTime,
+    suggestion: "Please check the URL or API documentation",
+  });
+});
+
+export default app;

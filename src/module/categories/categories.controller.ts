@@ -52,14 +52,7 @@ const createCategories = async (req: Request, res: Response) => {
 // =================================
 const getAllCategory = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
-
-    const data = await CategoriesService.getAllCategory(req.user.id);
+    const data = await CategoriesService.getAllCategory();
 
     if (data.length === 0) {
       return res.status(200).json({

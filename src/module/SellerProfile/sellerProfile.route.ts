@@ -11,7 +11,7 @@ router.post(
   sellerProfileController.createSellerProfile,
 );
 
-router.patch(
+router.put(
   "/seller-profile/:id",
   authGuard(),
   sellerProfileController.updateSellerProfile,

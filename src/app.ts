@@ -8,7 +8,6 @@ import { env } from "./config/env";
 import { auth } from "./lib/auth";
 import { userRouter } from "./module/auth/auth.route";
 import { medicineRouter } from "./module/medicine/medicine.route";
-import { OrderRouter } from "./module/order/orders.route";
 import { categoriesRouter } from "./module/categories/categories.route";
 import { sellerRouter } from "./module/SellerProfile/sellerProfile.route";
 

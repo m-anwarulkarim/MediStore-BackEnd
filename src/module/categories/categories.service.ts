@@ -21,7 +21,6 @@ const createCategories = async (
     // ================== Duplicate Check ==================
     const existingCategory = await prisma.category.findFirst({
       where: {
-        userId,
         OR: [{ name }, { slug: safeSlug }],
       },
     });
@@ -48,14 +47,25 @@ const createCategories = async (
 
 // ======================getAllCategory===================
 
-const getAllCategory = async (userId?: string) => {
+const getAllCategory = async () => {
   try {
-    return await prisma.category.findMany({
-      where: userId ? { userId } : {},
-      orderBy: { createdAt: "desc" },
+    const categories = await prisma.category.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
-  } catch (error: any) {
-    console.error("Error fetching Category:", error);
+
+    return categories;
+  } catch (error) {
+    console.error("Get all category service error:", error);
     throw new Error("Failed to fetch categories");
   }
 };
@@ -76,11 +86,7 @@ const updateCategory = async (
     }
 
     const safeSlug =
-      slug && typeof slug === "string"
-        ? slugify(slug)
-        : name
-          ? slugify(name)
-          : undefined;
+      slug && typeof slug === "string" ? slugify(slug) : undefined;
 
     // Duplicate check
     if (name || safeSlug) {
@@ -129,8 +135,11 @@ const deleteCategory = async (categoryId: string, userId: string) => {
       throw new Error("Cannot delete category with medicines");
     }
 
-    return await prisma.category.delete({
+    return await prisma.category.update({
       where: { id: categoryId },
+      data: {
+        isActive: false,
+      },
     });
   } catch (error: any) {
     console.error("Error deleting category:", error);

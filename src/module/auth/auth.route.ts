@@ -5,9 +5,9 @@ import { ROLE } from "../../../generated/prisma/enums";
 
 const router = Router();
 
-router.get("/admin/users", authGuard(ROLE.ADMIN), userController.viewAllUsers);
+router.get("/admin/users", authGuard(ROLE.ADMIN), userController.getAllUsers);
 
-router.get("/auth", authGuard(), userController.getCurrentUser);
+router.get("/", authGuard(), userController.getCurrentUser);
 
 router.patch(
   "/admin/users/:id",

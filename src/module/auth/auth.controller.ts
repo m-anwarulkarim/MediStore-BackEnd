@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
 import { userService } from "./auth.service";
 import { ROLE, USER_STATUS } from "../../../generated/prisma/enums";
+// 1.getAllUsers 2.getCurrentUser 3.updateUser
 
-const viewAllUsers = async (req: Request, res: Response) => {
+const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const data = await userService.viewAllUsers();
+    const data = await userService.getAllUsers();
 
     if (req.user?.role !== ROLE.ADMIN) {
       return res.status(403).json({
@@ -14,8 +15,8 @@ const viewAllUsers = async (req: Request, res: Response) => {
     }
 
     if (data.length === 0) {
-      return res.status(200).json({
-        success: true,
+      return res.status(400).json({
+        success: false,
         message: "No users found",
         data: [],
       });
@@ -128,7 +129,7 @@ const updateUser = async (req: Request, res: Response) => {
 };
 
 export const userController = {
-  viewAllUsers,
+  getAllUsers,
   getCurrentUser,
   updateUser,
 };

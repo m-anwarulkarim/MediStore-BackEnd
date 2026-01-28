@@ -1,5 +1,6 @@
-const createOrder = () => {};
-console.log("categories");
+const createOrder = () => {
+  console.log("categories");
+};
 
 export const OrderService = {
   createOrder,

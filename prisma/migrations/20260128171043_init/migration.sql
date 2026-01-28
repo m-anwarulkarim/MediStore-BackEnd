@@ -18,10 +18,10 @@ CREATE TABLE "Order" (
     "addressId" TEXT NOT NULL,
     "status" "ORDER_STATUS" NOT NULL DEFAULT 'PENDING',
     "paymentMethod" "PAYMENT_METHOD" NOT NULL DEFAULT 'CASH_ON_DELIVERY',
-    "subtotal" DOUBLE PRECISION NOT NULL,
-    "deliveryCharge" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "discount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "total" DOUBLE PRECISION NOT NULL,
+    "subtotal" DECIMAL(10,2) NOT NULL,
+    "deliveryCharge" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "discount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "total" DECIMAL(10,2) NOT NULL,
     "customerNote" TEXT,
     "cancelReason" TEXT,
     "deliveredAt" TIMESTAMP(3),
@@ -37,7 +37,7 @@ CREATE TABLE "OrderItem" (
     "orderId" TEXT NOT NULL,
     "medicineId" TEXT NOT NULL,
     "quantity" INTEGER NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
+    "price" DECIMAL(10,2) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "OrderItem_pkey" PRIMARY KEY ("id")
@@ -51,6 +51,7 @@ CREATE TABLE "Category" (
     "description" TEXT,
     "image" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "userId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -63,20 +64,24 @@ CREATE TABLE "Medicine" (
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "description" TEXT NOT NULL,
-    "genericName" TEXT,
     "manufacturer" TEXT NOT NULL,
-    "categoryId" TEXT NOT NULL,
-    "sellerId" TEXT NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
-    "discountPrice" DOUBLE PRECISION,
+    "price" DECIMAL(10,2) NOT NULL,
+    "discountPrice" DECIMAL(10,2),
     "stock" INTEGER NOT NULL DEFAULT 0,
     "dosageForm" TEXT,
     "strength" TEXT,
     "prescriptionRequired" BOOLEAN NOT NULL DEFAULT false,
+    "categoryId" TEXT NOT NULL,
+    "sellerId" TEXT NOT NULL,
     "image" TEXT,
     "images" TEXT[],
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isFeatured" BOOLEAN NOT NULL DEFAULT false,
+    "tags" TEXT[],
+    "rating" DECIMAL(2,1),
+    "views" INTEGER DEFAULT 0,
+    "metaDescription" TEXT,
+    "deletedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -222,16 +227,13 @@ CREATE INDEX "Order_status_idx" ON "Order"("status");
 CREATE INDEX "OrderItem_orderId_idx" ON "OrderItem"("orderId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
-
--- CreateIndex
 CREATE UNIQUE INDEX "Category_slug_key" ON "Category"("slug");
 
 -- CreateIndex
-CREATE INDEX "Category_slug_idx" ON "Category"("slug");
+CREATE INDEX "Category_userId_idx" ON "Category"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Medicine_slug_key" ON "Medicine"("slug");
+CREATE UNIQUE INDEX "Category_slug_userId_key" ON "Category"("slug", "userId");
 
 -- CreateIndex
 CREATE INDEX "Medicine_slug_idx" ON "Medicine"("slug");
@@ -244,6 +246,15 @@ CREATE INDEX "Medicine_sellerId_idx" ON "Medicine"("sellerId");
 
 -- CreateIndex
 CREATE INDEX "Medicine_isActive_idx" ON "Medicine"("isActive");
+
+-- CreateIndex
+CREATE INDEX "Medicine_name_idx" ON "Medicine"("name");
+
+-- CreateIndex
+CREATE INDEX "Medicine_manufacturer_idx" ON "Medicine"("manufacturer");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Medicine_slug_sellerId_key" ON "Medicine"("slug", "sellerId");
 
 -- CreateIndex
 CREATE INDEX "CartItem_userId_idx" ON "CartItem"("userId");
@@ -301,6 +312,9 @@ ALTER TABLE "OrderItem" ADD CONSTRAINT "OrderItem_orderId_fkey" FOREIGN KEY ("or
 
 -- AddForeignKey
 ALTER TABLE "OrderItem" ADD CONSTRAINT "OrderItem_medicineId_fkey" FOREIGN KEY ("medicineId") REFERENCES "Medicine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Category" ADD CONSTRAINT "Category_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Medicine" ADD CONSTRAINT "Medicine_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

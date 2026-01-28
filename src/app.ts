@@ -10,6 +10,7 @@ import { userRouter } from "./module/auth/auth.route";
 import { medicineRouter } from "./module/medicine/medicine.route";
 import { OrderRouter } from "./module/order/orders.route";
 import { categoriesRouter } from "./module/categories/categories.route";
+import { sellerRouter } from "./module/SellerProfile/sellerProfile.route";
 
 const app = express();
 
@@ -30,13 +31,16 @@ app.use(express.json());
 
 // ------------------- Routes -------------------
 app.use("/api", userRouter);
-app.use("/api/auth", userRouter);
-
-app.use("/api/seller", medicineRouter);
 app.use("/api", categoriesRouter);
+//---------
+app.use("/api/seller", medicineRouter);
 // app.use("/api/seller", OrderRouter);
 // app.use("/api/orders", OrderRouter);
+// -----------
 
+app.use("/api", sellerRouter);
+
+// ------------
 app.get("/", async (req: Request, res: Response) => {
   return res.status(200).json({
     success: true,

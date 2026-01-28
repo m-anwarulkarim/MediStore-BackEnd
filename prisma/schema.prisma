@@ -122,18 +122,22 @@ model Medicine {
   description          String
   manufacturer         String
   price                Decimal  @db.Decimal(10, 2)
-  genericName          String?
-  categoryId           String
-  sellerId             String
   discountPrice        Decimal? @db.Decimal(10, 2)
   stock                Int      @default(0)
-  dosageForm           String? // Tablet, Capsule, Syrup, etc.
-  strength             String? // 500mg, 10ml, etc.
+  dosageForm           String?  
+  strength             String?  
   prescriptionRequired Boolean  @default(false)
+  categoryId           String
+  sellerId             String
   image                String?
-  images               String[] // Array of image URLs
+  images               String[]
   isActive             Boolean  @default(true)
   isFeatured           Boolean  @default(false)
+  tags                 String[]   
+  rating               Decimal?   @db.Decimal(2, 1)
+  views                Int?       @default(0)
+  metaDescription      String?    
+  deletedAt            DateTime?  
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,12 +149,16 @@ model Medicine {
   reviews    Review[]
   cartItems  CartItem[]
 
+  // Unique & Indexes
   @@unique([slug, sellerId])
   @@index([slug])
   @@index([categoryId])
   @@index([sellerId])
   @@index([isActive])
+  @@index([name])          // For search by name
+  @@index([manufacturer])  // For search by manufacturer
 }
+
 
 // ==================
 // Cart Item

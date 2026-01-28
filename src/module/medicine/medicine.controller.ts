@@ -1,46 +1,196 @@
 import type { Request, Response } from "express";
 import { medicineService } from "./medicine.service";
+import { ROLE } from "../../../generated/prisma/enums";
+import type {
+  CreateMedicinePayload,
+  UpdateMedicinePayload,
+} from "../../types/Medicine";
 
-const createMedicine = async (req: Request, res: Response) => {
-  const userId = req.user?.id;
-  const { name, slug, description, manufacturer, price, categoryId } = req.body;
-
+// ==============================
+// Create medicine
+// ==============================
+const createMedicine = async (
+  req: Request<{}, {}, CreateMedicinePayload>,
+  res: Response,
+) => {
   try {
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        message: "Your are not authorized , A seller Can Add medicines",
-      });
-    }
-    if (!slug || !description || !manufacturer || !price || !categoryId) {
-      res.status(400).json({
-        success: false,
-        message:
-          "slug, description, manufacturer, price  are Requerd, please add it ",
-      });
-    }
-    const data = await medicineService.createMedicine(
-      name,
-      description,
-      manufacturer,
-      price,
-      userId!,
-      categoryId,
-    );
+    const user = req.user;
+    if (!user)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (user.role !== ROLE.SELLER)
+      return res
+        .status(403)
+        .json({ success: false, message: "Only sellers can add medicines" });
 
-    return res.status(200).json({
-      success: true,
-      message: "Current user retrieved successfully",
-      data,
+    const data = await medicineService.createMedicine({
+      ...req.body,
+      userId: user.id,
     });
-  } catch (error) {
-    res.status(400).json({
+
+    return res
+      .status(201)
+      .json({ success: true, message: "Medicine created successfully", data });
+  } catch (error: any) {
+    console.error("Create medicine controller error:", error);
+    return res.status(500).json({
       success: false,
-      Message: "",
+      message: error.message || "Failed to create medicine",
     });
   }
 };
 
-export const medicinController = {
+// ==============================
+// Get medicines
+// ==============================
+const getAllMedicine = async (req: Request, res: Response) => {
+  try {
+    const {
+      id,
+      slug,
+      categoryId,
+      sellerId,
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+    } = req.query;
+
+    const data = await medicineService.getAllMedicine({
+      id: id as string,
+      slug: slug as string,
+      categoryId: categoryId as string,
+      sellerId: sellerId as string,
+      page: page ? parseInt(page as string) : undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+      search: search as string,
+      sortBy: (sortBy as string) || "createdAt",
+      sortOrder: (sortOrder as string) === "asc" ? "asc" : "desc",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Medicines fetched successfully",
+      ...data,
+    });
+  } catch (error: any) {
+    console.error("Get medicine controller error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch medicines",
+    });
+  }
+};
+
+// ==============================
+// Update medicine
+// ==============================
+const updateMedicine = async (
+  req: Request<{ medicineId: string }, {}, UpdateMedicinePayload>,
+  res: Response,
+) => {
+  try {
+    const user = req.user;
+    const { medicineId } = req.params;
+    const payload = req.body;
+
+    if (!user)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (user.role !== ROLE.SELLER)
+      return res
+        .status(403)
+        .json({ success: false, message: "Only sellers can update medicines" });
+
+    const updatedMedicine = await medicineService.updateMedicine({
+      medicineId,
+      sellerId: user.id,
+      ...payload,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Medicine updated successfully",
+      data: updatedMedicine,
+    });
+  } catch (error: any) {
+    console.error("Update medicine error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update medicine",
+    });
+  }
+};
+
+// ==============================
+// Delete medicine
+// ==============================
+
+const deleteMedicine = async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+    const { medicineId } = req.params;
+
+    // 1. Auth check
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // 2. Role check (only seller can delete)
+    if (user.role !== ROLE.SELLER) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Only sellers can delete medicines" });
+    }
+
+    // 3. Call service to delete
+    const result = await medicineService.removeMedicine({
+      medicineId: medicineId as string,
+      sellerId: user.id,
+    });
+
+    return res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("Delete medicine error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete medicine",
+    });
+  }
+};
+// ==============================
+// Service:  Get single medicine details
+// ==============================
+const getMedicineDetails = async (req: Request, res: Response) => {
+  try {
+    const { medicineId } = req.params;
+
+    if (!medicineId) {
+      return res.status(400).json({
+        success: false,
+        message: "Medicine id is required",
+      });
+    }
+
+    const data = await medicineService.getMedicineDetails(medicineId as string);
+
+    return res.status(200).json({
+      success: true,
+      message: "Medicine details fetched successfully",
+      data,
+    });
+  } catch (error: any) {
+    console.error("Get medicine details error:", error);
+    return res.status(404).json({
+      success: false,
+      message: error.message || "Failed to fetch medicine details",
+    });
+  }
+};
+
+export const medicineController = {
   createMedicine,
+  getAllMedicine,
+  updateMedicine,
+  deleteMedicine,
+  getMedicineDetails,
 };

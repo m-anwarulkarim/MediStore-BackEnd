@@ -141,10 +141,37 @@ const updateOrderStatus = async (req: Request, res: Response) => {
     });
   }
 };
+
+// =========================
+// Admin: get all orders
+// =========================
+const getAllOrdersForAdmin = async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const orders = await orderService.getAllOrdersForAdmin();
+
+    res.status(200).json({
+      success: true,
+      data: orders,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const orderController = {
   createOrder,
   getOrderDetails,
   getUserOrders,
   getSellerOrders,
   updateOrderStatus,
+  getAllOrdersForAdmin,
 };

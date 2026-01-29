@@ -7,8 +7,6 @@ import { ROLE, USER_STATUS } from "../../../generated/prisma/enums";
 // ==========================
 const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const data = await userService.getAllUsers();
-
     // Only ADMIN can retrieve all users
     if (req.user?.role !== ROLE.ADMIN) {
       return res.status(403).json({
@@ -16,6 +14,7 @@ const getAllUsers = async (req: Request, res: Response) => {
         message: "You can only retrieve your own account",
       });
     }
+    const data = await userService.getAllUsers();
 
     // If no users found
     if (data.length === 0) {

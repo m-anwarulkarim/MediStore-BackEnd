@@ -7,7 +7,7 @@ import type {
 } from "../../types/Medicine";
 
 // ==============================
-// Service: Create a new medicine
+// Create a new medicine
 // ==============================
 const createMedicine = async ({
   name,
@@ -34,7 +34,6 @@ const createMedicine = async ({
   });
   if (!category) throw new Error("Invalid category");
 
-  // Validate discountPrice
   if (discountPrice != null && discountPrice >= price)
     throw new Error("Discount price must be less than original price");
 
@@ -59,6 +58,7 @@ const createMedicine = async ({
       strength,
       prescriptionRequired,
       images,
+      isActive: true,
     },
   });
 
@@ -66,7 +66,7 @@ const createMedicine = async ({
 };
 
 // ==============================
-// Service: Get medicines (filters + pagination + search + sort)
+// Get medicines (filters + pagination + search + sort)
 // ==============================
 const getAllMedicine = async ({
   id,
@@ -79,8 +79,10 @@ const getAllMedicine = async ({
   sortBy = "createdAt",
   sortOrder = "desc",
 }: GetMedicineInput) => {
-  const where: any = { isActive: true };
+  if (page < 1) page = 1;
+  if (limit < 1) limit = 10;
 
+  const where: any = { isActive: true };
   if (id) where.id = id;
   if (slug) where.slug = slug;
   if (categoryId) where.categoryId = categoryId;
@@ -118,10 +120,10 @@ const getAllMedicine = async ({
 };
 
 // ==============================
-// Service: Update medicine
+// Update medicine
 // ==============================
 const updateMedicine = async (data: UpdateMedicineInput) => {
-  const { medicineId, sellerId, name, categoryId, price, discountPrice } = data;
+  const { medicineId, sellerId } = data;
 
   const medicine = await prisma.medicine.findUnique({
     where: { id: medicineId },
@@ -130,37 +132,54 @@ const updateMedicine = async (data: UpdateMedicineInput) => {
   if (medicine.sellerId !== sellerId)
     throw new Error("Unauthorized: You can only update your own medicines");
 
-  // Validate discountPrice
-  if (discountPrice != null && price != null && discountPrice >= price)
-    throw new Error("Discount price must be less than original price");
+  // Only allowed fields
+  const updateData: any = {};
 
-  // Category validation
-  if (categoryId) {
-    const category = await prisma.category.findUnique({
-      where: { id: categoryId },
-    });
-    if (!category) throw new Error("Invalid category");
-  }
-
-  // Update slug if name changes
-  let slug;
-  if (name && name !== medicine.name) {
-    slug = slugify(name, { lower: true, strict: true, trim: true });
+  if (data.name && data.name !== medicine.name) {
+    const slug = slugify(data.name, { lower: true, strict: true, trim: true });
     const existing = await prisma.medicine.findUnique({
       where: { slug_sellerId: { slug, sellerId } },
     });
+
     if (existing) throw new Error("Medicine with this name already exists");
+    updateData.name = data.name;
+    updateData.slug = slug;
   }
+  if (data.description) updateData.description = data.description;
+
+  if (data.manufacturer) updateData.manufacturer = data.manufacturer;
+
+  if (data.price != null) updateData.price = data.price;
+
+  if (data.discountPrice != null) updateData.discountPrice = data.discountPrice;
+
+  if (data.categoryId) {
+    const category = await prisma.category.findUnique({
+      where: { id: data.categoryId },
+    });
+
+    if (!category) throw new Error("Invalid category");
+    updateData.categoryId = data.categoryId;
+  }
+  if (data.dosageForm) updateData.dosageForm = data.dosageForm;
+
+  if (data.strength) updateData.strength = data.strength;
+
+  if (data.prescriptionRequired != null)
+    updateData.prescriptionRequired = data.prescriptionRequired;
+
+  if (data.images) updateData.images = data.images;
 
   const updatedMedicine = await prisma.medicine.update({
     where: { id: medicineId },
-    data: { ...data, slug: slug || medicine.slug },
+    data: updateData,
   });
 
   return updatedMedicine;
 };
+
 // ==============================
-// Service: Delete medicine
+//  delete medicine
 // ==============================
 const removeMedicine = async ({
   medicineId,
@@ -169,64 +188,51 @@ const removeMedicine = async ({
   medicineId: string;
   sellerId: string;
 }) => {
-  // 1. Check if medicine exists
   const medicine = await prisma.medicine.findUnique({
     where: { id: medicineId },
   });
-
-  if (!medicine) {
-    throw new Error("Medicine not found");
-  }
-
-  // 2. Ensure seller owns this medicine
-  if (medicine.sellerId !== sellerId) {
+  if (!medicine) throw new Error("Medicine not found");
+  if (medicine.sellerId !== sellerId)
     throw new Error("Unauthorized: You can only delete your own medicines");
-  }
 
-  // 3. Delete medicine
-  await prisma.medicine.delete({
+  //  delete
+  await prisma.medicine.update({
     where: { id: medicineId },
+    data: { isActive: false },
   });
 
   return { message: "Medicine deleted successfully" };
 };
+
 // ==============================
-// Service:  Get single medicine details
+// Get single medicine details (with review pagination)
 // ==============================
-const getMedicineDetails = async (medicineId: string) => {
-  const medicine = await prisma.medicine.findFirst({
-    where: {
-      id: medicineId,
-      isActive: true,
-    },
+const getMedicineDetails = async (
+  medicineId: string,
+  reviewPage = 1,
+  reviewLimit = 5,
+) => {
+  const skip = (reviewPage - 1) * reviewLimit;
+
+  const medicine = await prisma.medicine.findUnique({
+    where: { id: medicineId },
     include: {
       category: true,
-      seller: {
-        select: {
-          id: true,
-          shopName: true,
-          isVerified: true,
-        },
-      },
+      seller: { select: { id: true, shopName: true, isVerified: true } },
       reviews: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
+        include: { user: { select: { id: true, name: true } } },
+        skip,
+        take: reviewLimit,
         orderBy: { createdAt: "desc" },
       },
     },
   });
 
-  if (!medicine) {
-    throw new Error("Medicine not found");
-  }
+  if (!medicine || !medicine.isActive) throw new Error("Medicine not found");
 
-  return medicine;
+  const totalReviews = await prisma.review.count({ where: { medicineId } });
+
+  return { ...medicine, reviewPage, reviewLimit, totalReviews };
 };
 
 export const medicineService = {

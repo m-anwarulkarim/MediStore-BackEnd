@@ -4,11 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --watch src/server.ts",
-    "start": "bun dist/server.js",
     "seed:admin": "bun run src/lib/seedAdmin.ts",
-    "build": "prisma generate && tsup src/server.ts --format esm --platform node --target node20 --outDir api --external pg-native",
-    "postinstall": "prisma generate"
+    "build": "prisma generate && tsup src/server.ts --format esm --platform node --target node20 --outDir dist --external pg-native",
+    "start": "node dist/server.js",
+    "dev": "bun --watch src/server.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

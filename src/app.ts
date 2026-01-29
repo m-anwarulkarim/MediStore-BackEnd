@@ -1,4 +1,3 @@
-// src/server.ts
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
@@ -12,6 +11,7 @@ import { categoriesRouter } from "./module/categories/categories.route";
 import { sellerRouter } from "./module/SellerProfile/sellerProfile.route";
 import { OrderRouter } from "./module/order/orders.route";
 import { addressRouter } from "./module/Address/address.route";
+import { cartItemRouter } from "./module/cartItem/cartItem.route";
 
 const app = express();
 
@@ -44,6 +44,8 @@ app.use("/api", OrderRouter);
 app.use("/api", sellerRouter);
 
 app.use("/api/address", addressRouter);
+
+app.use("/api/cart-item", cartItemRouter);
 // ------------
 app.get("/", async (req: Request, res: Response) => {
   return res.status(200).json({

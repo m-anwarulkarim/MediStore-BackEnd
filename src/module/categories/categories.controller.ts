@@ -14,7 +14,7 @@ const createCategories = async (req: Request, res: Response) => {
       });
     }
 
-    if (user.role !== ROLE.ADMIN) {
+    if (user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER) {
       return res.status(403).json({
         success: false,
         message: "Forbidden",

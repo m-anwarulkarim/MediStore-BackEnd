@@ -7,7 +7,7 @@ const router = Router();
 
 router.post(
   "/seller-profile",
-  authGuard(),
+  authGuard(ROLE.SELLER),
   sellerProfileController.createSellerProfile,
 );
 

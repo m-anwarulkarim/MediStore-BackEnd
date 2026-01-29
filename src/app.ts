@@ -37,7 +37,7 @@ app.use("/api", categoriesRouter);
 //---------
 app.use("/api/seller", medicineRouter);
 
-app.use("/api", OrderRouter);
+app.use("/api/orders", OrderRouter);
 
 // -----------
 

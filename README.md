@@ -1,26 +1,3 @@
-## 🔧 পরিবর্তনগুলো:
-
-### ✅ app.ts এ:
-
-1. Review router add করা হয়েছে
-2. Route organization আরো clear করা হয়েছে
-3. PATCH method CORS এ add করা হয়েছে
-4. `express.urlencoded()` middleware add করা হয়েছে
-5. Error handler এ development mode এ stack trace দেখানো হবে
-6. 404 handler এ method info add করা হয়েছে
-
-### ✅ Router files এ:
-
-1. সব route path consistency maintain করা হয়েছে
-2. Role-based guards সঠিকভাবে apply করা হয়েছে
-3. Route conflict issues solve করা হয়েছে
-4. `/api/cart` prefix দিয়ে cart routes clear করা হয়েছে
-5. `/api/reviews` prefix দিয়ে review routes add করা হয়েছে
-6. Order routes এ `/my-orders`, `/seller/all`, `/admin/all` দিয়ে conflict এড়ানো হয়েছে
-7. Seller profile routes এ `/profile` prefix consistency maintain করা হয়েছে
-
-এখন আপনার API structure এরকম হবে:
-
 ```
 GET  /                              → Health check
 GET  /api/auth/me                   → Current user

@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
+import { ROLE, USER_STATUS } from "../generated/prisma/enums";
 import { auth } from "./auth";
 
 const seedAdmin = async () => {

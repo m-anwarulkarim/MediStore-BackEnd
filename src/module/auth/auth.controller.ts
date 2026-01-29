@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { userService } from "./auth.service";
-import { ROLE, USER_STATUS } from "../../../generated/prisma/enums";
+import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
 
 // ==========================
 // 1. Controller: Get all users (ADMIN only)

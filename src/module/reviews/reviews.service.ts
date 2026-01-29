@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 import type { CreateReviewPayload } from "../../types/reviews";
 
 // =============================

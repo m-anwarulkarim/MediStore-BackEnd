@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { CategoriesService } from "./categories.service";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 
 const createCategories = async (req: Request, res: Response) => {
   try {

@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { medicineService } from "./medicine.service";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 import type {
   CreateMedicinePayload,
   UpdateMedicinePayload,

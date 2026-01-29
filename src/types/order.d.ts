@@ -1,4 +1,4 @@
-import type { ROLE } from "../../generated/prisma/enums";
+import type { ROLE } from "../generated/prisma/enums";
 
 export interface CreateOrderPayload {
   userId: string;

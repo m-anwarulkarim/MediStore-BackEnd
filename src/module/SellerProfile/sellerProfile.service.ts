@@ -1,4 +1,4 @@
-import { ROLE, USER_STATUS } from "../../../generated/prisma/enums";
+import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import type {
   CreateSellerProfileInput,

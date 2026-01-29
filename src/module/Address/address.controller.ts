@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { addressService } from "./address.service";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 
 const createAddress = async (req: Request, res: Response) => {
   try {

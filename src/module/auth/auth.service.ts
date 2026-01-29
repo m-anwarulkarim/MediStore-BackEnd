@@ -1,4 +1,4 @@
-import { USER_STATUS } from "../../../generated/prisma/enums";
+import { USER_STATUS } from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 
 // 1. getAllUsers  2. getCurrentUser  3. updatedUser  4. deleteUser

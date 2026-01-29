@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 import { reviewService } from "./reviews.service";
 
 // =============================

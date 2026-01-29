@@ -2,7 +2,7 @@ import {
   ORDER_STATUS,
   PAYMENT_METHOD,
   ROLE,
-} from "../../../generated/prisma/enums";
+} from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import type {
   CreateOrderPayload,

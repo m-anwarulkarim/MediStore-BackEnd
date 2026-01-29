@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { orderService } from "./orders.service";
-import { ROLE } from "../../../generated/prisma/enums";
+import { ROLE } from "../../generated/prisma/enums";
 
 const createOrder = async (req: Request, res: Response) => {
   try {

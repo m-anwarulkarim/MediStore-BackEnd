@@ -2,7 +2,6 @@ import { Router } from "express";
 import { medicineController } from "./medicine.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
-
 const router = Router();
 
 // ==============================

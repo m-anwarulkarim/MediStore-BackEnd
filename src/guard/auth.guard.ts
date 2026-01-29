@@ -1,26 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
-import { ROLE, USER_STATUS } from "../generated/prisma/enums";
 import { auth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
-
-const toAuthHeaders = (headers: Record<string, any>) => {
-  const result: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      result[key] = value;
-    }
-  }
-
-  return result;
-};
+import { ROLE, USER_STATUS } from "../generated/prisma/enums";
 
 const authGuard = (...allowedRoles: ROLE[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Retrieve active session from Better Auth
       const session = await auth.api.getSession({
-        headers: toAuthHeaders(req.headers),
+        headers: req.headers,
       });
 
       // Check if valid session exists with authenticated user

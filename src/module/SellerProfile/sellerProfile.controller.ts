@@ -1,10 +1,10 @@
 import type { Request, Response } from "express";
 import { sellerProfileService } from "./sellerProfile.service";
-import { ROLE } from "../../generated/prisma/enums";
 import type {
   CreateSellerProfilePayload,
   UpdateSellerProfilePayload,
 } from "../../types/SellerProfile";
+import { ROLE } from "../../generated/prisma/enums";
 
 const createSellerProfile = async (
   req: Request<{}, {}, CreateSellerProfilePayload>,

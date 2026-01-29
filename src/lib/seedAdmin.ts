@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
-import { ROLE, USER_STATUS } from "../generated/prisma/enums";
 import { auth } from "./auth";
+import { ROLE, USER_STATUS } from "../generated/prisma/enums";
 
 const seedAdmin = async () => {
   if (!process.env.ADMIN_PASS) {

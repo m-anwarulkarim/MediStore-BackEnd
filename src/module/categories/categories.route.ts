@@ -2,25 +2,30 @@ import { Router } from "express";
 import { CategoriesController } from "./categories.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+
 const router = Router();
 
+// Admin/Seller: Create category
 router.post(
-  "/categories",
+  "/",
   authGuard(ROLE.ADMIN, ROLE.SELLER),
   CategoriesController.createCategories,
 );
 
-router.get("/categories", CategoriesController.getAllCategory);
+// Public: Get all categories
+router.get("/", CategoriesController.getAllCategory);
 
+// Admin: Update category
 router.patch(
-  "/categories/:id",
-  authGuard(),
+  "/:id",
+  authGuard(ROLE.ADMIN),
   CategoriesController.updateCategory,
 );
 
+// Admin: Delete category
 router.delete(
-  "/categories/:id",
-  authGuard(),
+  "/:id",
+  authGuard(ROLE.ADMIN),
   CategoriesController.deleteCategory,
 );
 

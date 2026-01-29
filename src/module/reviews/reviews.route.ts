@@ -1,24 +1,24 @@
 import { Router } from "express";
-import authGuard from "../../guard/auth.guard";
 import { reviewController } from "./review.controller";
+import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
 
 const router = Router();
 
-// 1. Customer: Create a review
-router.post("/", authGuard(ROLE.CUSTOMER), reviewController.createReview);
-
-// 2. Get all reviews for a medicine (public)
+// Public: Get all reviews for a medicine
 router.get("/medicine/:medicineId", reviewController.getMedicineReviews);
 
-// 3. Seller: Get all reviews for their medicines
+// Customer: Create a review
+router.post("/", authGuard(ROLE.CUSTOMER), reviewController.createReview);
+
+// Seller: Get all reviews for their medicines
 router.get(
-  "/seller",
+  "/seller/all",
   authGuard(ROLE.SELLER),
   reviewController.getSellerReviews,
 );
 
-// 4. Admin: Delete a review
+// Admin: Delete a review
 router.delete(
   "/:reviewId",
   authGuard(ROLE.ADMIN),

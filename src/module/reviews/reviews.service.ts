@@ -4,7 +4,6 @@ import type { CreateReviewPayload } from "../../types/reviews";
 // =============================
 // Create a review for a medicine
 // =============================
-
 const createReview = async ({
   userId,
   medicineId,
@@ -13,21 +12,45 @@ const createReview = async ({
   comment,
 }: CreateReviewPayload) => {
   // 1. Validate rating
-
-  if (rating < 1 || rating > 5) {
+  if (!rating || rating < 1 || rating > 5) {
     throw new Error("Rating must be between 1 and 5");
   }
 
-  // 2. Check if user has ordered this medicine
+  // 2. Validate comment
+  if (!comment || comment.trim().length === 0) {
+    throw new Error("Review comment is required");
+  }
+
+  if (comment.trim().length < 10) {
+    throw new Error("Review comment must be at least 10 characters");
+  }
+
+  if (comment.length > 1000) {
+    throw new Error("Review comment must not exceed 1000 characters");
+  }
+
+  // 3. Check if user has ordered this medicine
   const orderItem = await prisma.orderItem.findFirst({
-    where: { orderId, medicineId, order: { userId } },
+    where: {
+      orderId,
+      medicineId,
+      order: { userId },
+    },
+    include: {
+      order: true,
+    },
   });
 
   if (!orderItem) {
     throw new Error("You can only review medicines you have purchased");
   }
 
-  // 3. Check if user already reviewed this medicine for this order
+  // 4. Check if order is delivered (optional but recommended)
+  if (orderItem.order.status !== "DELIVERED") {
+    throw new Error("You can only review after the order is delivered");
+  }
+
+  // 5. Check if user already reviewed this medicine for this order
   const existingReview = await prisma.review.findFirst({
     where: { userId, medicineId, orderId },
   });
@@ -36,18 +59,63 @@ const createReview = async ({
     throw new Error("You have already reviewed this medicine for this order");
   }
 
-  // 4. Create review
+  // 6. Create review
   const review = await prisma.review.create({
     data: {
       userId,
       medicineId,
       orderId,
       rating,
-      comment,
+      comment: comment.trim(),
+      isVerified: true, // Verified because linked to order
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      medicine: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   });
 
+  // 7. Update medicine average rating (optional but nice to have)
+  await updateMedicineRating(medicineId);
+
   return review;
+};
+
+// =============================
+// Helper: Update medicine average rating
+// =============================
+const updateMedicineRating = async (medicineId: string) => {
+  const reviews = await prisma.review.findMany({
+    where: { medicineId },
+    select: { rating: true },
+  });
+
+  if (reviews.length === 0) {
+    await prisma.medicine.update({
+      where: { id: medicineId },
+      data: { rating: null },
+    });
+    return;
+  }
+
+  const avgRating =
+    reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+
+  await prisma.medicine.update({
+    where: { id: medicineId },
+    data: { rating: Math.round(avgRating * 10) / 10 }, // Round to 1 decimal
+  });
 };
 
 // =============================
@@ -57,7 +125,13 @@ const getMedicineReviews = async (medicineId: string) => {
   return await prisma.review.findMany({
     where: { medicineId },
     include: {
-      user: { select: { id: true, name: true, email: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -70,8 +144,20 @@ const getSellerReviews = async (sellerId: string) => {
   return await prisma.review.findMany({
     where: { medicine: { sellerId } },
     include: {
-      user: { select: { id: true, name: true } },
-      medicine: { select: { id: true, name: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
+      },
+      medicine: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -81,10 +167,78 @@ const getSellerReviews = async (sellerId: string) => {
 // Delete a review (Admin only)
 // =============================
 const deleteReview = async (reviewId: string) => {
-  const review = await prisma.review.findUnique({ where: { id: reviewId } });
-  if (!review) throw new Error("Review not found");
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+    select: { medicineId: true },
+  });
 
-  return await prisma.review.delete({ where: { id: reviewId } });
+  if (!review) {
+    throw new Error("Review not found");
+  }
+
+  await prisma.review.delete({ where: { id: reviewId } });
+
+  // Update medicine rating after deletion
+  await updateMedicineRating(review.medicineId);
+
+  return { message: "Review deleted successfully" };
+};
+
+// =============================
+// Update a review (Optional - Customer updates their own review)
+// =============================
+const updateReview = async (
+  reviewId: string,
+  userId: string,
+  rating?: number,
+  comment?: string,
+) => {
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+  });
+
+  if (!review) {
+    throw new Error("Review not found");
+  }
+
+  if (review.userId !== userId) {
+    throw new Error("Unauthorized to update this review");
+  }
+
+  // Validation
+  if (rating !== undefined && (rating < 1 || rating > 5)) {
+    throw new Error("Rating must be between 1 and 5");
+  }
+
+  if (comment !== undefined) {
+    if (comment.trim().length < 10) {
+      throw new Error("Review comment must be at least 10 characters");
+    }
+    if (comment.length > 1000) {
+      throw new Error("Review comment must not exceed 1000 characters");
+    }
+  }
+
+  const updatedReview = await prisma.review.update({
+    where: { id: reviewId },
+    data: {
+      ...(rating !== undefined && { rating }),
+      ...(comment !== undefined && { comment: comment.trim() }),
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  // Update medicine rating
+  await updateMedicineRating(review.medicineId);
+
+  return updatedReview;
 };
 
 export const reviewService = {
@@ -92,4 +246,5 @@ export const reviewService = {
   getMedicineReviews,
   getSellerReviews,
   deleteReview,
+  updateReview,
 };

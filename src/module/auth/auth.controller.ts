@@ -3,52 +3,48 @@ import { userService } from "./auth.service";
 import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
 
 // ==========================
-// 1. Controller: Get all users (ADMIN only)
+// 1. Get all users (ADMIN only)
 // ==========================
 const getAllUsers = async (req: Request, res: Response) => {
   try {
-    // Only ADMIN can retrieve all users
     if (req.user?.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "You can only retrieve your own account",
+        message: "Admin access required",
       });
     }
+
     const data = await userService.getAllUsers();
 
-    // If no users found
     if (data.length === 0) {
-      return res.status(400).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
         message: "No users found",
         data: [],
       });
     }
 
-    // Success response
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Users retrieved successfully",
       data: data,
     });
   } catch (error: any) {
-    console.error("Error in viewAllUsers controller:", error);
-    res.status(500).json({
+    console.error("Error in getAllUsers controller:", error);
+    return res.status(500).json({
       success: false,
       message: "Failed to retrieve users",
-      error: error.message,
     });
   }
 };
 
 // ==========================
-// 2. Controller: Get current logged-in user
+// 2. Get current logged-in user
 // ==========================
 const getCurrentUser = async (req: Request, res: Response) => {
   try {
     const user = req.user;
 
-    // Check if user is authenticated
     if (!user?.id) {
       return res.status(401).json({
         success: false,
@@ -56,10 +52,8 @@ const getCurrentUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Fetch current user data
     const data = await userService.getCurrentUser(user.id);
 
-    // If user not found
     if (!data) {
       return res.status(404).json({
         success: false,
@@ -67,13 +61,12 @@ const getCurrentUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Success response
     return res.status(200).json({
       success: true,
       message: "Current user retrieved successfully",
       data,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in getCurrentUser controller:", error);
     return res.status(500).json({
       success: false,
@@ -83,22 +76,22 @@ const getCurrentUser = async (req: Request, res: Response) => {
 };
 
 // ==========================
-// 3. Controller: Update user status
+// 3. Update user status (ADMIN only)
 // ==========================
 const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    // 1. Validate required fields
+    // Validate required fields
     if (!id || !status) {
       return res.status(400).json({
         success: false,
-        message: "User ID & status are required",
+        message: "User ID and status are required",
       });
     }
 
-    // 2. Validate status against enum values
+    // Validate status against enum values
     if (!Object.values(USER_STATUS).includes(status)) {
       return res.status(400).json({
         success: false,
@@ -107,18 +100,16 @@ const updateUser = async (req: Request, res: Response) => {
       });
     }
 
-    // 3. Only ADMIN  can update
+    // Only ADMIN can update
     if (req.user?.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "Only admins are authorized to update user accounts",
+        message: "Admin access required",
       });
     }
 
-    // Perform update
     const data = await userService.updatedUser(id as string, status);
 
-    // 4. Check if user exists
     if (!data) {
       return res.status(404).json({
         success: false,
@@ -126,31 +117,36 @@ const updateUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Success response
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "User updated successfully",
+      message: "User status updated successfully",
       data: data,
     });
   } catch (error: any) {
-    console.error("Error in updatedUser controller:", error);
-    res.status(500).json({
+    console.error("Error in updateUser controller:", error);
+
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       message: "Failed to update user",
-      error: error.message,
     });
   }
 };
 
 // ==========================
-// 4. Controller: Delete user by ADMIN
+// 4. Delete user by ADMIN
 // ==========================
 const deleteUserByAdmin = async (req: Request, res: Response) => {
   try {
     const admin = req.user;
     const { userId } = req.params;
 
-    // Only ADMIN can delete other users
     if (!admin || admin.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
@@ -158,38 +154,51 @@ const deleteUserByAdmin = async (req: Request, res: Response) => {
       });
     }
 
-    // Validate userId
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User id is required",
+        message: "User ID is required",
       });
     }
 
-    // Perform delete
+    // Prevent admin from deleting themselves
+    if (admin.id === userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete your own account",
+      });
+    }
+
     await userService.deleteUser(userId as string);
 
     return res.status(200).json({
       success: true,
-      message: "User account has been deactivated by admin",
+      message: "User account has been suspended",
     });
   } catch (error: any) {
     console.error("Admin delete user error:", error);
+
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to delete user",
+      message: "Failed to delete user",
     });
   }
 };
 
 // ==========================
-// 5. Controller: Delete own account (SELLER or CUSTOMER only)
+// 5. Delete own account (SELLER or CUSTOMER only)
 // ==========================
 const deleteMyAccount = async (req: Request, res: Response) => {
   try {
     const user = req.user;
 
-    // Must be logged in
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -197,15 +206,13 @@ const deleteMyAccount = async (req: Request, res: Response) => {
       });
     }
 
-    // Only SELLER or CUSTOMER can delete their account
     if (user.role !== ROLE.SELLER && user.role !== ROLE.CUSTOMER) {
       return res.status(403).json({
         success: false,
-        message: "Only sellers & customers can delete their account",
+        message: "Only sellers and customers can delete their account",
       });
     }
 
-    // Perform delete
     await userService.deleteUser(user.id);
 
     return res.status(200).json({
@@ -216,7 +223,7 @@ const deleteMyAccount = async (req: Request, res: Response) => {
     console.error("Delete account error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to delete account",
+      message: "Failed to delete account",
     });
   }
 };

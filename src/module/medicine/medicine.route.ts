@@ -2,42 +2,30 @@ import { Router } from "express";
 import { medicineController } from "./medicine.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+
 const router = Router();
 
-// ==============================
+// Public: Get all medicines (with filters, search, pagination)
+router.get("/", medicineController.getAllMedicine);
+
+// Public: Get single medicine details
+router.get("/:medicineId", medicineController.getMedicineDetails);
+
 // Seller: Create new medicine
-// ==============================
-router.post(
-  "/medicines",
-  authGuard(ROLE.SELLER),
-  medicineController.createMedicine,
-);
+router.post("/", authGuard(ROLE.SELLER), medicineController.createMedicine);
 
-// ==============================
-// Public: Get medicines with filters
-// ==============================
-router.get("/medicines", medicineController.getAllMedicine);
-
-// ==============================
 // Seller: Update own medicine
-// ==============================
 router.put(
-  "/medicines/:medicineId",
+  "/:medicineId",
   authGuard(ROLE.SELLER),
   medicineController.updateMedicine,
 );
 
-// ==============================
-// Seller: Delete  medicine
-// ============================
+// Seller: Delete own medicine
 router.delete(
-  "/medicines/:medicineId",
+  "/:medicineId",
   authGuard(ROLE.SELLER),
   medicineController.deleteMedicine,
 );
-// ==============================
-// Service:  Get single medicine details
-// ==============================
-router.get("/medicines/:medicineId", medicineController.getMedicineDetails);
 
 export const medicineRouter = router;

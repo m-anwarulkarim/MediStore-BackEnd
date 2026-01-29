@@ -2,6 +2,9 @@ import type { Request, Response } from "express";
 import { CategoriesService } from "./categories.service";
 import { ROLE } from "../../generated/prisma/enums";
 
+// ==========================
+// 1. Create category
+// ==========================
 const createCategories = async (req: Request, res: Response) => {
   try {
     const { name, slug } = req.body;
@@ -17,11 +20,11 @@ const createCategories = async (req: Request, res: Response) => {
     if (user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden",
+        message: "Only admins and sellers can create categories",
       });
     }
 
-    if (!name) {
+    if (!name || name.trim().length === 0) {
       return res.status(400).json({
         success: false,
         message: "Category name is required",
@@ -35,7 +38,11 @@ const createCategories = async (req: Request, res: Response) => {
       });
     }
 
-    const data = await CategoriesService.createCategories(name, user.id, slug);
+    const data = await CategoriesService.createCategories(
+      name.trim(),
+      user.id,
+      slug,
+    );
 
     return res.status(201).json({
       success: true,
@@ -43,28 +50,35 @@ const createCategories = async (req: Request, res: Response) => {
       data,
     });
   } catch (error: any) {
+    console.error("Create category error:", error);
+
+    if (error.message.includes("already exists")) {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to create category",
+      message: "Failed to create category",
     });
   }
 };
-// =================================
+
+// ==========================
+// 2. Get all categories
+// ==========================
 const getAllCategory = async (req: Request, res: Response) => {
   try {
     const data = await CategoriesService.getAllCategory();
 
-    if (data.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: "No categories found",
-        data: [],
-      });
-    }
-
     return res.status(200).json({
       success: true,
-      message: "Categories retrieved successfully",
+      message:
+        data.length === 0
+          ? "No categories found"
+          : "Categories retrieved successfully",
       data,
     });
   } catch (error: any) {
@@ -76,22 +90,19 @@ const getAllCategory = async (req: Request, res: Response) => {
   }
 };
 
-// ====================
-interface UpdateCategoryBody {
-  name?: string;
-  slug?: string;
-}
-
+// ==========================
+// 3. Update category
+// ==========================
 const updateCategory = async (req: Request, res: Response) => {
   try {
     const user = req.user;
-    const { name, slug } = req.body as UpdateCategoryBody;
+    const { name, slug } = req.body;
     const categoryId = req.params.id;
 
     if (!user || user.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden: Admin access required",
+        message: "Admin access required",
       });
     }
 
@@ -105,7 +116,7 @@ const updateCategory = async (req: Request, res: Response) => {
     if (!name && !slug) {
       return res.status(400).json({
         success: false,
-        message: "At least one field (name or slug) is required to update",
+        message: "At least one field (name or slug) is required",
       });
     }
 
@@ -116,10 +127,16 @@ const updateCategory = async (req: Request, res: Response) => {
       });
     }
 
-    // Call service
+    if (name && name.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Category name must be under 100 characters",
+      });
+    }
+
     const updatedCategory = await CategoriesService.updateCategory(
       categoryId as string,
-      name,
+      name?.trim(),
       slug,
     );
 
@@ -130,25 +147,40 @@ const updateCategory = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error in updateCategory controller:", error);
+
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("already exists")) {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to update category",
-      error: error.message,
     });
   }
 };
-// ============================
 
+// ==========================
+// 4. Delete category
+// ==========================
 const deleteCategory = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const user = req.user;
 
-    // Validation
     if (!user || user.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden: Admin access required",
+        message: "Admin access required",
       });
     }
 
@@ -159,10 +191,7 @@ const deleteCategory = async (req: Request, res: Response) => {
       });
     }
 
-    const data = await CategoriesService.deleteCategory(
-      id as string,
-      user.id as string,
-    );
+    const data = await CategoriesService.deleteCategory(id as string, user.id);
 
     return res.status(200).json({
       success: true,
@@ -171,10 +200,27 @@ const deleteCategory = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error in deleteCategory controller:", error);
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("unauthorized")
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("Cannot delete")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to delete category",
-      error: error.message,
     });
   }
 };

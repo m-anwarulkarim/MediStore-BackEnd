@@ -2,9 +2,13 @@ import type { Request, Response } from "express";
 import { addressService } from "./address.service";
 import { ROLE } from "../../generated/prisma/enums";
 
+// ==========================
+// 1. Create address
+// ==========================
 const createAddress = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -12,9 +16,9 @@ const createAddress = async (req: Request, res: Response) => {
       });
     }
 
-    // Validation
     const { fullName, phone, city, area, postalCode, addressLine } = req.body;
 
+    // Validation
     if (!fullName || !phone || !city || !area || !postalCode || !addressLine) {
       return res.status(400).json({
         success: false,
@@ -23,11 +27,20 @@ const createAddress = async (req: Request, res: Response) => {
       });
     }
 
+    // Validate phone number format (basic)
+    const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format",
+      });
+    }
+
     const address = await addressService.createAddress({
       userId: user.id,
       fullName: fullName.trim(),
       phone: phone.trim(),
-      country: req.body.country,
+      country: req.body.country || "Bangladesh",
       city: city.trim(),
       state: req.body.state,
       area: area.trim(),
@@ -51,9 +64,13 @@ const createAddress = async (req: Request, res: Response) => {
   }
 };
 
+// ==========================
+// 2. Update address
+// ==========================
 const updateAddress = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -62,6 +79,7 @@ const updateAddress = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
+
     if (!addressId) {
       return res.status(400).json({
         success: false,
@@ -104,14 +122,18 @@ const updateAddress = async (req: Request, res: Response) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to update address",
+      message: "Failed to update address",
     });
   }
 };
 
+// ==========================
+// 3. Delete address
+// ==========================
 const deleteAddress = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -120,6 +142,7 @@ const deleteAddress = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
+
     if (!addressId) {
       return res.status(400).json({
         success: false,
@@ -152,18 +175,22 @@ const deleteAddress = async (req: Request, res: Response) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to delete address",
+      message: "Failed to delete address",
     });
   }
 };
 
+// ==========================
+// 4. Get all addresses (ADMIN only)
+// ==========================
 const getAllAddresses = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user || user.role !== ROLE.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden - Admin access required",
+        message: "Admin access required",
       });
     }
 
@@ -178,15 +205,18 @@ const getAllAddresses = async (req: Request, res: Response) => {
     console.error("Get all addresses error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch addresses",
+      message: "Failed to fetch addresses",
     });
   }
 };
 
-// Get all addresses for current user
+// ==========================
+// 5. Get my addresses
+// ==========================
 const getMyAddresses = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -205,15 +235,18 @@ const getMyAddresses = async (req: Request, res: Response) => {
     console.error("Get my addresses error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch addresses",
+      message: "Failed to fetch addresses",
     });
   }
 };
 
-// Get single address by ID for current user
+// ==========================
+// 6. Get single address by ID
+// ==========================
 const getMyAddressById = async (req: Request, res: Response) => {
   try {
     const user = req.user;
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -222,6 +255,7 @@ const getMyAddressById = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
+
     if (!addressId) {
       return res.status(400).json({
         success: false,
@@ -254,7 +288,7 @@ const getMyAddressById = async (req: Request, res: Response) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch address",
+      message: "Failed to fetch address",
     });
   }
 };
@@ -263,7 +297,7 @@ export const addressController = {
   createAddress,
   updateAddress,
   deleteAddress,
+  getAllAddresses,
   getMyAddresses,
   getMyAddressById,
-  getAllAddresses,
 };

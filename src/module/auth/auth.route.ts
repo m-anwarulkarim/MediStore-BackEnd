@@ -5,21 +5,27 @@ import { ROLE } from "../../generated/prisma/enums";
 
 const router = Router();
 
+// Admin: Get all users
 router.get("/admin/users", authGuard(ROLE.ADMIN), userController.getAllUsers);
 
-router.get("/auth", authGuard(), userController.getCurrentUser);
+// Current user info
+router.get("/auth/me", authGuard(), userController.getCurrentUser);
 
+// Admin: Update user status
 router.patch(
   "/admin/users/:id",
   authGuard(ROLE.ADMIN),
   userController.updateUser,
 );
-// ==============
+
+// Admin: Delete user
 router.delete(
-  "/admin/:userId",
+  "/admin/users/:userId",
   authGuard(ROLE.ADMIN),
   userController.deleteUserByAdmin,
 );
-router.delete("/users", authGuard(), userController.deleteMyAccount);
+
+// Customer/Seller: Delete own account
+router.delete("/users/me", authGuard(), userController.deleteMyAccount);
 
 export const userRouter = router;

@@ -5,44 +5,42 @@ import { ROLE } from "../../generated/prisma/enums";
 
 const router = Router();
 
-// 1. Create a new order from cart (Customer only)
+// Admin: Get all orders
+router.get(
+  "/admin/all",
+  authGuard(ROLE.ADMIN),
+  orderController.getAllOrdersForAdmin,
+);
 
+// Seller: Get orders for their medicines
+router.get(
+  "/seller/all",
+  authGuard(ROLE.SELLER),
+  orderController.getSellerOrders,
+);
+
+// Customer: Create order from cart
 router.post("/", authGuard(ROLE.CUSTOMER), orderController.createOrder);
 
-// 2. Get current user's orders (Customer only)
+// Customer: Get my orders
+router.get(
+  "/my-orders",
+  authGuard(ROLE.CUSTOMER),
+  orderController.getUserOrders,
+);
 
-router.get("/", authGuard(ROLE.CUSTOMER), orderController.getUserOrders);
-
-// 3. Get single order details (Customer, Seller, Admin)
-
+// Customer/Seller/Admin: Get single order details
 router.get(
   "/:orderId",
   authGuard(ROLE.CUSTOMER, ROLE.SELLER, ROLE.ADMIN),
   orderController.getOrderDetails,
 );
 
-// 4. Seller: get orders for their medicines
-
-router.get(
-  "/seller/orders",
-  authGuard(ROLE.SELLER),
-  orderController.getSellerOrders,
-);
-
-// 5. Update order status (Seller or Admin)
-
+// Seller/Admin: Update order status
 router.patch(
-  "/status/:orderId",
+  "/:orderId/status",
   authGuard(ROLE.SELLER, ROLE.ADMIN),
   orderController.updateOrderStatus,
-);
-
-// 6. Admin: get all orders
-
-router.get(
-  "/admin/all",
-  authGuard(ROLE.ADMIN),
-  orderController.getAllOrdersForAdmin,
 );
 
 export const OrderRouter = router;

@@ -5,26 +5,32 @@ import { ROLE } from "../../generated/prisma/enums";
 
 const router = Router();
 
+// Admin: Get all sellers
+router.get(
+  "/all",
+  authGuard(ROLE.ADMIN),
+  sellerProfileController.getAllSellers,
+);
+
+// Seller: Create seller profile
 router.post(
-  "/seller-profile",
+  "/profile",
   authGuard(ROLE.SELLER),
   sellerProfileController.createSellerProfile,
 );
 
-router.put(
-  "/seller-profile/:id",
-  authGuard(),
-  sellerProfileController.updateSellerProfile,
-);
+// Seller: Get own profile
 router.get(
-  "/seller-profile",
-  authGuard(),
+  "/profile",
+  authGuard(ROLE.SELLER),
   sellerProfileController.getCurrentSellerProfile,
 );
-router.get(
-  "/all-sellers",
-  authGuard(ROLE.ADMIN),
-  sellerProfileController.getAllSellers,
+
+// Seller: Update own profile
+router.put(
+  "/profile",
+  authGuard(ROLE.SELLER),
+  sellerProfileController.updateSellerProfile,
 );
 
 export const sellerRouter = router;

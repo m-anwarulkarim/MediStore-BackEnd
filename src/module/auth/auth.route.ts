@@ -9,7 +9,7 @@ const router = Router();
 router.get("/admin/users", authGuard(ROLE.ADMIN), userController.getAllUsers);
 
 // Current user info
-router.get("/auth/me", authGuard(), userController.getCurrentUser);
+router.get("/auth", authGuard(), userController.getCurrentUser);
 
 // Admin: Update user status
 router.patch(

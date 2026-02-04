@@ -7,7 +7,7 @@ import { ROLE } from "../../generated/prisma/enums";
 // ==========================
 const createCategories = async (req: Request, res: Response) => {
   try {
-    const { name, slug } = req.body;
+    const { name, slug, description, image } = req.body;
     const user = req.user;
 
     if (!user) {
@@ -42,6 +42,8 @@ const createCategories = async (req: Request, res: Response) => {
       name.trim(),
       user.id,
       slug,
+      image,
+      description,
     );
 
     return res.status(201).json({
@@ -99,10 +101,10 @@ const updateCategory = async (req: Request, res: Response) => {
     const { name, slug } = req.body;
     const categoryId = req.params.id;
 
-    if (!user || user.role !== ROLE.ADMIN) {
+    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Admin access required",
+        message: "Admin or SELLER access required",
       });
     }
 
@@ -177,10 +179,10 @@ const deleteCategory = async (req: Request, res: Response) => {
     const id = req.params.id;
     const user = req.user;
 
-    if (!user || user.role !== ROLE.ADMIN) {
+    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Admin access required",
+        message: "Admin or Seller access required",
       });
     }
 
@@ -225,9 +227,48 @@ const deleteCategory = async (req: Request, res: Response) => {
   }
 };
 
+// ==========================
+// 5. Get Single category
+// ==========================
+const getSingleCategory = async (req: Request, res: Response) => {
+  try {
+    const categoryId = req.params.id;
+
+    if (!categoryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required",
+      });
+    }
+
+    const category = await CategoriesService.getSingleCategory(
+      categoryId as string,
+    );
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Category retrieved successfully",
+      data: category.id,
+    });
+  } catch (error: any) {
+    console.error("Error in getSingleCategory controller:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch category details",
+    });
+  }
+};
 export const CategoriesController = {
   createCategories,
   getAllCategory,
   updateCategory,
   deleteCategory,
+  getSingleCategory,
 };

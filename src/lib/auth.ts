@@ -11,7 +11,7 @@ const requiredEmailEnvVars = ["APP_EMAIL", "APP_PASS"] as const;
 for (const envVar of requiredEmailEnvVars) {
   if (!process.env[envVar]) {
     console.warn(
-      `  Warning: ${envVar} is not set. Email features will be disabled.`,
+      `Warning: ${envVar} is not set. Email features will be disabled.`,
     );
   }
 }
@@ -27,9 +27,8 @@ const transporter = nodemailer.createTransport({
     user: process.env.APP_EMAIL,
     pass: process.env.APP_PASS,
   },
-  // Connection timeout
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 5000, // 5 seconds
+  connectionTimeout: 10000,
+  greetingTimeout: 5000,
 });
 
 // =============================
@@ -38,9 +37,9 @@ const transporter = nodemailer.createTransport({
 if (process.env.APP_EMAIL && process.env.APP_PASS) {
   transporter.verify((error) => {
     if (error) {
-      console.error(" Email transporter verification failed:", error);
+      console.error("Email transporter verification failed:", error);
     } else {
-      console.log(" Email transporter is ready");
+      console.log("Email transporter is ready");
     }
   });
 }
@@ -55,17 +54,13 @@ const queueFailedEmail = async (
   url: string,
   error: any,
 ) => {
-  try {
-    console.error("📧 Email queued for retry:", {
-      userId,
-      email,
-      type,
-      timestamp: new Date().toISOString(),
-      error: error.message,
-    });
-  } catch (queueError) {
-    console.error("Failed to queue email:", queueError);
-  }
+  console.error("Email queued for retry:", {
+    userId,
+    email,
+    type,
+    timestamp: new Date().toISOString(),
+    error: error?.message || error,
+  });
 };
 
 // =============================
@@ -81,15 +76,15 @@ const sendEmailWithRetry = async (
     try {
       const info = await transporter.sendMail(mailOptions);
       console.log(
-        ` Email sent successfully (attempt ${attempt}):`,
+        `Email sent successfully (attempt ${attempt}):`,
         info.messageId,
       );
       return true;
     } catch (error: any) {
       lastError = error;
       console.error(
-        ` Email send failed (attempt ${attempt}/${maxRetries}):`,
-        error.message,
+        `Email send failed (attempt ${attempt}/${maxRetries}):`,
+        error?.message || error,
       );
 
       if (attempt < maxRetries) {
@@ -99,8 +94,7 @@ const sendEmailWithRetry = async (
     }
   }
 
-  // All retries failed
-  console.error(" All email send attempts failed:", lastError);
+  console.error("All email send attempts failed:", lastError);
   return false;
 };
 
@@ -111,7 +105,29 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-  baseURL: process.env.BETTER_AUTH_URL,
+
+  baseURL: process.env.BETTER_AUTH_URL as string,
+
+  trustedOrigins: [process.env.FRONTEND_URL as string],
+
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 30 * 60,
+    },
+  },
+
+  advanced: {
+    cookiePrefix: "better-auth",
+    useSecureCookies: false,
+    defaultCookieAttributes: {
+      sameSite: "lax",
+      secure: false,
+      httpOnly: false,
+    },
+  },
 
   socialProviders: {
     google: {
@@ -129,10 +145,10 @@ export const auth = betterAuth({
 
   emailVerification: {
     sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url, token }) => {
+    sendVerificationEmail: async ({ user, url }) => {
       if (!process.env.APP_EMAIL || !process.env.APP_PASS) {
         console.warn(
-          "  Email credentials not configured. Skipping verification email.",
+          "Email credentials not configured. Skipping verification email.",
         );
         return;
       }
@@ -180,7 +196,6 @@ export const auth = betterAuth({
         const success = await sendEmailWithRetry(mailOptions);
 
         if (!success) {
-          // Queue for retry but don't block signup
           await queueFailedEmail(
             user.id,
             user.email,
@@ -188,14 +203,10 @@ export const auth = betterAuth({
             url,
             new Error("All retry attempts failed"),
           );
-
-          console.warn(
-            "  User signed up but verification email failed. Email queued for retry.",
-          );
+          console.warn("User signed up but verification email failed.");
         }
       } catch (error: any) {
-        console.error(" Unexpected error in sendVerificationEmail:", error);
-
+        console.error("Unexpected error in sendVerificationEmail:", error);
         await queueFailedEmail(user.id, user.email, "VERIFICATION", url, error);
       }
     },

@@ -176,7 +176,7 @@ var requiredEmailEnvVars = ["APP_EMAIL", "APP_PASS"];
 for (const envVar of requiredEmailEnvVars) {
   if (!process.env[envVar]) {
     console.warn(
-      `  Warning: ${envVar} is not set. Email features will be disabled.`
+      `Warning: ${envVar} is not set. Email features will be disabled.`
     );
   }
 }
@@ -188,33 +188,26 @@ var transporter = nodemailer.createTransport({
     user: process.env.APP_EMAIL,
     pass: process.env.APP_PASS
   },
-  // Connection timeout
   connectionTimeout: 1e4,
-  // 10 seconds
   greetingTimeout: 5e3
-  // 5 seconds
 });
 if (process.env.APP_EMAIL && process.env.APP_PASS) {
   transporter.verify((error) => {
     if (error) {
-      console.error(" Email transporter verification failed:", error);
+      console.error("Email transporter verification failed:", error);
     } else {
-      console.log(" Email transporter is ready");
+      console.log("Email transporter is ready");
     }
   });
 }
 var queueFailedEmail = async (userId, email, type, url, error) => {
-  try {
-    console.error("\u{1F4E7} Email queued for retry:", {
-      userId,
-      email,
-      type,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-      error: error.message
-    });
-  } catch (queueError) {
-    console.error("Failed to queue email:", queueError);
-  }
+  console.error("Email queued for retry:", {
+    userId,
+    email,
+    type,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    error: error?.message || error
+  });
 };
 var sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
   let lastError;
@@ -222,15 +215,15 @@ var sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
     try {
       const info = await transporter.sendMail(mailOptions);
       console.log(
-        ` Email sent successfully (attempt ${attempt}):`,
+        `Email sent successfully (attempt ${attempt}):`,
         info.messageId
       );
       return true;
     } catch (error) {
       lastError = error;
       console.error(
-        ` Email send failed (attempt ${attempt}/${maxRetries}):`,
-        error.message
+        `Email send failed (attempt ${attempt}/${maxRetries}):`,
+        error?.message || error
       );
       if (attempt < maxRetries) {
         const waitTime = Math.pow(2, attempt) * 1e3;
@@ -238,7 +231,7 @@ var sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
       }
     }
   }
-  console.error(" All email send attempts failed:", lastError);
+  console.error("All email send attempts failed:", lastError);
   return false;
 };
 var auth = betterAuth({
@@ -246,6 +239,17 @@ var auth = betterAuth({
     provider: "postgresql"
   }),
   baseURL: process.env.BETTER_AUTH_URL,
+  cookies: {
+    session: {
+      name: "better-auth.session",
+      options: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "none",
+        path: "/"
+      }
+    }
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -260,10 +264,10 @@ var auth = betterAuth({
   },
   emailVerification: {
     sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url, token }) => {
+    sendVerificationEmail: async ({ user, url }) => {
       if (!process.env.APP_EMAIL || !process.env.APP_PASS) {
         console.warn(
-          "  Email credentials not configured. Skipping verification email."
+          "Email credentials not configured. Skipping verification email."
         );
         return;
       }
@@ -315,12 +319,10 @@ var auth = betterAuth({
             url,
             new Error("All retry attempts failed")
           );
-          console.warn(
-            "  User signed up but verification email failed. Email queued for retry."
-          );
+          console.warn("User signed up but verification email failed.");
         }
       } catch (error) {
-        console.error(" Unexpected error in sendVerificationEmail:", error);
+        console.error("Unexpected error in sendVerificationEmail:", error);
         await queueFailedEmail(user.id, user.email, "VERIFICATION", url, error);
       }
     }
@@ -3304,9 +3306,10 @@ var ReviewRouter = router8;
 var app = express();
 app.use(
   cors({
-    origin: env.FRONT_END_URL,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true
+    origin: ["http://localhost:3000"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 app.use(express.json());
@@ -3362,29 +3365,29 @@ var app_default = app;
 // src/server.ts
 var port = env.PORT;
 var server = app_default.listen(port, () => {
-  console.log(`\u{1F680} Server running on port ${port}`);
-  console.log(`\u{1F30D} Environment: ${env.NODE_ENV || "development"}`);
-  console.log(`\u{1F517} Frontend URL: ${env.FRONT_END_URL}`);
+  console.log(` Server running on port ${port}`);
+  console.log(` Environment: ${env.NODE_ENV || "development"}`);
+  console.log(` Frontend URL: ${env.FRONT_END_URL}`);
 });
 var shutdown = (signal) => {
   console.log(`
 ${signal} received, shutting down gracefully...`);
   server.close(() => {
-    console.log("\u2705 Server closed");
+    console.log(" Server closed");
     process.exit(0);
   });
   setTimeout(() => {
-    console.error("\u26A0\uFE0F Forcing shutdown");
+    console.error(" Forcing shutdown");
     process.exit(1);
   }, 1e4);
 };
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("uncaughtException", (error) => {
-  console.error("\u274C Uncaught Exception:", error);
+  console.error(" Uncaught Exception:", error);
   process.exit(1);
 });
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("\u274C Unhandled Rejection at:", promise, "reason:", reason);
+  console.error(" Unhandled Rejection at:", promise, "reason:", reason);
   process.exit(1);
 });

@@ -5,6 +5,8 @@ const createCategories = async (
   name: string,
   userId: string,
   slug?: string,
+  image?: string,
+  description?: string,
 ) => {
   try {
     // ================== Slug ==================
@@ -35,6 +37,8 @@ const createCategories = async (
         name,
         slug: safeSlug,
         userId,
+        image: image,
+        description: description,
       },
     });
 
@@ -53,10 +57,8 @@ const getAllCategory = async () => {
       where: {
         isActive: true,
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
+      include: {
+        medicines: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -146,9 +148,37 @@ const deleteCategory = async (categoryId: string, userId: string) => {
     throw error;
   }
 };
+
+// ====================== getSingleCategory ===================
+const getSingleCategory = async (id: string) => {
+  try {
+    const result = await prisma.category.findUnique({
+      where: {
+        id: id,
+      },
+      include: {
+        _count: {
+          select: { medicines: true },
+        },
+      },
+    });
+    console.log(result);
+    if (!result) {
+      throw new Error("Category not found");
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error("Error fetching single category:", error);
+    throw error;
+  }
+};
+
+// ====================== Export Updated ======================
 export const CategoriesService = {
   createCategories,
   getAllCategory,
   updateCategory,
   deleteCategory,
+  getSingleCategory, // এটি যোগ করা হলো
 };

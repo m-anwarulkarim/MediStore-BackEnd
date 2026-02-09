@@ -239,15 +239,24 @@ var auth = betterAuth({
     provider: "postgresql"
   }),
   baseURL: process.env.BETTER_AUTH_URL,
-  cookies: {
-    session: {
-      name: "better-auth.session",
-      options: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "none",
-        path: "/"
-      }
+  trustedOrigins: [process.env.FRONTEND_URL],
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    // 7 days
+    updateAge: 60 * 60 * 24,
+    // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 30 * 60
+    }
+  },
+  advanced: {
+    cookiePrefix: "better-auth",
+    useSecureCookies: false,
+    defaultCookieAttributes: {
+      sameSite: "lax",
+      secure: false,
+      httpOnly: false
     }
   },
   socialProviders: {
@@ -627,7 +636,7 @@ var auth_guard_default = authGuard;
 // src/module/auth/auth.route.ts
 var router = Router();
 router.get("/admin/users", auth_guard_default(ROLE.ADMIN), userController.getAllUsers);
-router.get("/auth/me", auth_guard_default(), userController.getCurrentUser);
+router.get("/auth", auth_guard_default(), userController.getCurrentUser);
 router.patch(
   "/admin/users/:id",
   auth_guard_default(ROLE.ADMIN),
@@ -1098,7 +1107,7 @@ function slugify2(text) {
 }
 
 // src/module/categories/categories.service.ts
-var createCategories = async (name, userId, slug) => {
+var createCategories = async (name, userId, slug, image, description) => {
   try {
     let safeSlug;
     if (slug && typeof slug === "string") {
@@ -1120,7 +1129,9 @@ var createCategories = async (name, userId, slug) => {
       data: {
         name,
         slug: safeSlug,
-        userId
+        userId,
+        image,
+        description
       }
     });
     return result;
@@ -1135,10 +1146,8 @@ var getAllCategory = async () => {
       where: {
         isActive: true
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true
+      include: {
+        medicines: true
       },
       orderBy: {
         createdAt: "desc"
@@ -1210,17 +1219,41 @@ var deleteCategory = async (categoryId, userId) => {
     throw error;
   }
 };
+var getSingleCategory = async (id) => {
+  try {
+    const result = await prisma.category.findUnique({
+      where: {
+        id
+      },
+      include: {
+        _count: {
+          select: { medicines: true }
+        }
+      }
+    });
+    console.log(result);
+    if (!result) {
+      throw new Error("Category not found");
+    }
+    return result;
+  } catch (error) {
+    console.error("Error fetching single category:", error);
+    throw error;
+  }
+};
 var CategoriesService = {
   createCategories,
   getAllCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  getSingleCategory
+  // এটি যোগ করা হলো
 };
 
 // src/module/categories/categories.controller.ts
 var createCategories2 = async (req, res) => {
   try {
-    const { name, slug } = req.body;
+    const { name, slug, description, image } = req.body;
     const user = req.user;
     if (!user) {
       return res.status(401).json({
@@ -1249,7 +1282,9 @@ var createCategories2 = async (req, res) => {
     const data = await CategoriesService.createCategories(
       name.trim(),
       user.id,
-      slug
+      slug,
+      image,
+      description
     );
     return res.status(201).json({
       success: true,
@@ -1291,10 +1326,10 @@ var updateCategory2 = async (req, res) => {
     const user = req.user;
     const { name, slug } = req.body;
     const categoryId = req.params.id;
-    if (!user || user.role !== ROLE.ADMIN) {
+    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Admin access required"
+        message: "Admin or SELLER access required"
       });
     }
     if (!categoryId) {
@@ -1355,10 +1390,10 @@ var deleteCategory2 = async (req, res) => {
   try {
     const id = req.params.id;
     const user = req.user;
-    if (!user || user.role !== ROLE.ADMIN) {
+    if (!user || user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Admin access required"
+        message: "Admin or Seller access required"
       });
     }
     if (!id) {
@@ -1393,11 +1428,43 @@ var deleteCategory2 = async (req, res) => {
     });
   }
 };
+var getSingleCategory2 = async (req, res) => {
+  try {
+    const categoryId = req.params.id;
+    if (!categoryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required"
+      });
+    }
+    const category = await CategoriesService.getSingleCategory(
+      categoryId
+    );
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found"
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Category retrieved successfully",
+      data: category.id
+    });
+  } catch (error) {
+    console.error("Error in getSingleCategory controller:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch category details"
+    });
+  }
+};
 var CategoriesController = {
   createCategories: createCategories2,
   getAllCategory: getAllCategory2,
   updateCategory: updateCategory2,
-  deleteCategory: deleteCategory2
+  deleteCategory: deleteCategory2,
+  getSingleCategory: getSingleCategory2
 };
 
 // src/module/categories/categories.route.ts
@@ -1410,13 +1477,18 @@ router3.post(
 router3.get("/", CategoriesController.getAllCategory);
 router3.patch(
   "/:id",
-  auth_guard_default(ROLE.ADMIN),
+  auth_guard_default(ROLE.ADMIN, ROLE.SELLER),
   CategoriesController.updateCategory
 );
 router3.delete(
   "/:id",
-  auth_guard_default(ROLE.ADMIN),
+  auth_guard_default(ROLE.ADMIN, ROLE.SELLER),
   CategoriesController.deleteCategory
+);
+router3.patch(
+  "/:id",
+  auth_guard_default(ROLE.ADMIN, ROLE.SELLER),
+  CategoriesController.getSingleCategory
 );
 var categoriesRouter = router3;
 

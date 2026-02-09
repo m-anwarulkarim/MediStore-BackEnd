@@ -24,13 +24,12 @@ enum ROLE {
 }
 
 enum ORDER_STATUS {
-  PENDING
+  PLACED
   CONFIRMED
   PROCESSING
   SHIPPED
   DELIVERED
   CANCELLED
-  PLACED
 }
 
 enum USER_STATUS {
@@ -52,7 +51,7 @@ model Order {
   orderNumber   String         @unique
   userId        String
   addressId     String
-  status        ORDER_STATUS   @default(PENDING)
+  status        ORDER_STATUS   @default(PLACED)
   paymentMethod PAYMENT_METHOD @default(CASH_ON_DELIVERY)
 
   subtotal       Decimal @db.Decimal(10, 2)

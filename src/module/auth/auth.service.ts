@@ -1,4 +1,4 @@
-import { USER_STATUS } from "../../generated/prisma/enums";
+import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 
 // 1. getAllUsers  2. getCurrentUser  3. updatedUser  4. deleteUser
@@ -80,9 +80,45 @@ const deleteUser = async (userId: string) => {
   });
 };
 
+const updateUserRoleAndInitSellerProfile = async (id: string, role: ROLE) => {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id } });
+
+    if (!user) throw new Error("User not found");
+    if (user.status !== USER_STATUS.ACTIVE)
+      throw new Error("User is not active");
+
+    // 1) Update role
+    const updatedUser = await tx.user.update({
+      where: { id },
+      data: { role },
+    });
+
+    // 2) Auto-create seller profile only when upgrading to SELLER
+    if (role === ROLE.SELLER) {
+      const existingProfile = await tx.sellerProfile.findUnique({
+        where: { userId: id },
+      });
+
+      if (!existingProfile) {
+        await tx.sellerProfile.create({
+          data: {
+            userId: id,
+            shopName: user.name ? `${user.name}'s Shop` : "My Shop",
+            shopDescription: "",
+          },
+        });
+      }
+    }
+
+    return updatedUser;
+  });
+};
+
 export const userService = {
   getAllUsers,
   getCurrentUser,
   updatedUser,
   deleteUser,
+  updateUserRoleAndInitSellerProfile,
 };

@@ -228,10 +228,26 @@ const deleteMyAccount = async (req: Request, res: Response) => {
   }
 };
 
+const updateUserRole = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { role } = req.body as { role: ROLE };
+
+  const result = await userService.updateUserRoleAndInitSellerProfile(
+    id as string,
+    role,
+  );
+
+  return res.status(200).json({
+    success: true,
+    message: "User role updated (seller profile initialized if needed)",
+    data: result,
+  });
+};
 export const userController = {
   getAllUsers,
   getCurrentUser,
   updateUser,
   deleteUserByAdmin,
   deleteMyAccount,
+  updateUserRole,
 };

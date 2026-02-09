@@ -29,10 +29,6 @@ router.delete(
   CategoriesController.deleteCategory,
 );
 
-// Admin/Seller: Update category
-router.patch(
-  "/:id",
-  authGuard(ROLE.ADMIN, ROLE.SELLER),
-  CategoriesController.getSingleCategory,
-);
+router.get("/:id", CategoriesController.getSingleCategory);
+
 export const categoriesRouter = router;

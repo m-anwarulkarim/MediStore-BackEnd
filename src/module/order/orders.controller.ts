@@ -91,8 +91,7 @@ const getUserOrders = async (req: Request, res: Response) => {
 const getSellerOrders = async (req: Request, res: Response) => {
   try {
     const user = req.user;
-
-    if (!user || user.role !== "SELLER") {
+    if (!user || user.role !== ROLE.SELLER) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 

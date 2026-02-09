@@ -28,4 +28,10 @@ router.delete(
   medicineController.deleteMedicine,
 );
 
+router.patch(
+  "/:medicineId/stock",
+  authGuard(ROLE.SELLER),
+  medicineController.updateStock,
+);
+
 export const medicineRouter = router;

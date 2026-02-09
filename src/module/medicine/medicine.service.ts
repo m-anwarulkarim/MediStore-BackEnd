@@ -235,10 +235,40 @@ const getMedicineDetails = async (
   return { ...medicine, reviewPage, reviewLimit, totalReviews };
 };
 
+//  Stock update service
+const updateStock = async ({
+  medicineId,
+  sellerId, // SellerProfile.id
+  stock,
+}: {
+  medicineId: string;
+  sellerId: string;
+  stock: number;
+}) => {
+  const medicine = await prisma.medicine.findUnique({
+    where: { id: medicineId },
+    select: { id: true, sellerId: true, isActive: true, stock: true },
+  });
+
+  if (!medicine || !medicine.isActive) throw new Error("Medicine not found");
+
+  if (medicine.sellerId !== sellerId) {
+    throw new Error("Unauthorized: You can only update your own medicines");
+  }
+
+  const updated = await prisma.medicine.update({
+    where: { id: medicineId },
+    data: { stock },
+  });
+
+  return updated;
+};
+
 export const medicineService = {
   createMedicine,
   getAllMedicine,
   updateMedicine,
   removeMedicine,
   getMedicineDetails,
+  updateStock,
 };

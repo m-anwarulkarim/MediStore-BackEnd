@@ -3,8 +3,10 @@ import { medicineService } from "./medicine.service";
 import type {
   CreateMedicinePayload,
   UpdateMedicinePayload,
+  UpdateStockPayload,
 } from "../../types/Medicine";
 import { ROLE } from "../../generated/prisma/enums";
+import { prisma } from "../../lib/prisma";
 
 // ==========================
 // 1. Create medicine
@@ -319,10 +321,82 @@ const deleteMedicine = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ PATCH /api/medicines/:medicineId/stock
+const updateStock = async (
+  req: Request<{ medicineId: string }, {}, UpdateStockPayload>,
+  res: Response,
+) => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (user.role !== ROLE.SELLER) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Only sellers can update stock" });
+    }
+
+    const { medicineId } = req.params;
+    const { stock } = req.body;
+
+    if (!medicineId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Medicine ID is required" });
+    }
+
+    if (typeof stock !== "number" || Number.isNaN(stock) || stock < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock must be a non-negative number",
+      });
+    }
+
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    if (!sellerProfile) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Seller profile not found" });
+    }
+
+    const updated = await medicineService.updateStock({
+      medicineId,
+      sellerId: sellerProfile.id,
+      stock,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Stock updated successfully",
+      data: updated,
+    });
+  } catch (error: any) {
+    // friendly error mapping
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    if (error.message?.includes("Unauthorized")) {
+      return res.status(403).json({ success: false, message: error.message });
+    }
+
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to update stock" });
+  }
+};
+
 export const medicineController = {
   createMedicine,
   getAllMedicine,
   getMedicineDetails,
   updateMedicine,
   deleteMedicine,
+  updateStock,
 };

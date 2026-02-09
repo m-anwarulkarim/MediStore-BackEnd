@@ -74,3 +74,12 @@ export interface UpdateMedicineInput {
   isActive?: boolean;
   isFeatured?: boolean;
 }
+export type UpdateStockPayload = {
+  stock: number;
+};
+
+export type UpdateStockInput = {
+  medicineId: string;
+  sellerId: string; // SellerProfile.id
+  stock: number;
+};

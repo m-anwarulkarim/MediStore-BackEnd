@@ -28,4 +28,10 @@ router.delete(
 // Customer/Seller: Delete own account
 router.delete("/users/me", authGuard(), userController.deleteMyAccount);
 
+router.patch(
+  "/admin/users/:id/role",
+  authGuard(ROLE.ADMIN),
+  userController.updateUserRole,
+);
+
 export const userRouter = router;

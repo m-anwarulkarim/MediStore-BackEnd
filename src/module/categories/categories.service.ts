@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { slugify } from "../../ui/slugify";
 
+// ================== createCategories ==================
 const createCategories = async (
   name: string,
   userId: string,
@@ -9,7 +10,6 @@ const createCategories = async (
   description?: string,
 ) => {
   try {
-    // ================== Slug ==================
     let safeSlug: string;
 
     if (slug && typeof slug === "string") {
@@ -20,7 +20,6 @@ const createCategories = async (
       throw new Error("Category name is required");
     }
 
-    // ================== Duplicate Check ==================
     const existingCategory = await prisma.category.findFirst({
       where: {
         OR: [{ name }, { slug: safeSlug }],
@@ -31,7 +30,6 @@ const createCategories = async (
       throw new Error("Category with this name or slug already exists");
     }
 
-    // ================== Create ==================
     const result = await prisma.category.create({
       data: {
         name,
@@ -49,8 +47,7 @@ const createCategories = async (
   }
 };
 
-// ======================getAllCategory===================
-
+// ====================== getAllCategory ===================
 const getAllCategory = async () => {
   try {
     const categories = await prisma.category.findMany({
@@ -59,6 +56,11 @@ const getAllCategory = async () => {
       },
       include: {
         medicines: true,
+        _count: {
+          select: {
+            medicines: true,
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -72,12 +74,18 @@ const getAllCategory = async () => {
   }
 };
 
-// ============updateCategory============
+// ====================== updateCategory ===================
 const updateCategory = async (
   categoryId: string,
-  name?: string,
-  slug?: string,
+  updateData: {
+    name?: string;
+    slug?: string;
+    image?: string;
+    description?: string;
+  },
 ) => {
+  const { name, slug, image, description } = updateData;
+
   try {
     const existingCategory = await prisma.category.findUnique({
       where: { id: categoryId },
@@ -87,18 +95,23 @@ const updateCategory = async (
       throw new Error("Category not found");
     }
 
-    const safeSlug =
-      slug && typeof slug === "string" ? slugify(slug) : undefined;
+    // Slug logic: prioritize provided slug, then name, else keep existing
+    let safeSlug = undefined;
+    if (slug) {
+      safeSlug = slugify(slug);
+    } else if (name) {
+      safeSlug = slugify(name);
+    }
 
-    // Duplicate check
+    // Duplicate check for other categories
     if (name || safeSlug) {
       const duplicate = await prisma.category.findFirst({
         where: {
           id: { not: categoryId },
           OR: [
-            name ? { name } : undefined,
-            safeSlug ? { slug: safeSlug } : undefined,
-          ].filter(Boolean) as any,
+            ...(name ? [{ name }] : []),
+            ...(safeSlug ? [{ slug: safeSlug }] : []),
+          ],
         },
       });
 
@@ -112,57 +125,62 @@ const updateCategory = async (
       data: {
         ...(name && { name }),
         ...(safeSlug && { slug: safeSlug }),
+        ...(image !== undefined && { image }),
+        ...(description !== undefined && { description }),
       },
     });
   } catch (error: any) {
-    console.error("Error updating category:", error);
+    console.error("Error updating category in service:", error);
     throw error;
   }
 };
-// =========deleteCategory========
-const deleteCategory = async (categoryId: string, userId: string) => {
+
+// ====================== deleteCategory ===================
+const deleteCategory = async (categoryId: string) => {
   try {
-    const existingCategory = await prisma.category.findFirst({
-      where: { id: categoryId, userId },
-      include: {
-        _count: { select: { medicines: true } },
-      },
-    });
-
-    if (!existingCategory) {
-      throw new Error("Category not found or unauthorized");
-    }
-
-    if (existingCategory._count.medicines > 0) {
-      throw new Error("Cannot delete category with medicines");
-    }
-
-    return await prisma.category.update({
+    const existingCategory = await prisma.category.findUnique({
       where: { id: categoryId },
-      data: {
-        isActive: false,
-      },
-    });
-  } catch (error: any) {
-    console.error("Error deleting category:", error);
-    throw error;
-  }
-};
-
-// ====================== getSingleCategory ===================
-const getSingleCategory = async (id: string) => {
-  try {
-    const result = await prisma.category.findUnique({
-      where: {
-        id: id,
-      },
       include: {
         _count: {
           select: { medicines: true },
         },
       },
     });
-    console.log(result);
+
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+
+    if (existingCategory._count.medicines > 0) {
+      throw new Error(
+        "Cannot delete category: It contains linked medicines. Remove medicines first.",
+      );
+    }
+    const result = await prisma.category.update({
+      where: { id: categoryId },
+      data: {
+        isActive: false,
+      },
+    });
+
+    return result;
+  } catch (error: any) {
+    console.error("Error in deleteCategory service:", error);
+    throw error;
+  }
+};
+// ====================== getSingleCategory ===================
+const getSingleCategory = async (id: string) => {
+  try {
+    const result = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { medicines: true },
+        },
+      },
+    });
+
     if (!result) {
       throw new Error("Category not found");
     }
@@ -174,11 +192,11 @@ const getSingleCategory = async (id: string) => {
   }
 };
 
-// ====================== Export Updated ======================
+// ====================== Export ======================
 export const CategoriesService = {
   createCategories,
   getAllCategory,
   updateCategory,
   deleteCategory,
-  getSingleCategory, // এটি যোগ করা হলো
+  getSingleCategory,
 };

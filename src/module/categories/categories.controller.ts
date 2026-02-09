@@ -31,13 +31,6 @@ const createCategories = async (req: Request, res: Response) => {
       });
     }
 
-    if (name.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name must be under 100 characters",
-      });
-    }
-
     const data = await CategoriesService.createCategories(
       name.trim(),
       user.id,
@@ -53,18 +46,12 @@ const createCategories = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Create category error:", error);
-
-    if (error.message.includes("already exists")) {
-      return res.status(409).json({
+    return res
+      .status(error.message.includes("already exists") ? 409 : 500)
+      .json({
         success: false,
-        message: error.message,
+        message: error.message || "Failed to create category",
       });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create category",
-    });
   }
 };
 
@@ -74,7 +61,6 @@ const createCategories = async (req: Request, res: Response) => {
 const getAllCategory = async (req: Request, res: Response) => {
   try {
     const data = await CategoriesService.getAllCategory();
-
     return res.status(200).json({
       success: true,
       message:
@@ -84,11 +70,9 @@ const getAllCategory = async (req: Request, res: Response) => {
       data,
     });
   } catch (error: any) {
-    console.error("Error in getAllCategory:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch categories",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch categories" });
   }
 };
 
@@ -98,48 +82,21 @@ const getAllCategory = async (req: Request, res: Response) => {
 const updateCategory = async (req: Request, res: Response) => {
   try {
     const user = req.user;
-    const { name, slug } = req.body;
+    const { name, slug, image, description } = req.body;
     const categoryId = req.params.id;
 
-    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
-      return res.status(403).json({
-        success: false,
-        message: "Admin or SELLER access required",
-      });
-    }
-
-    if (!categoryId) {
-      return res.status(400).json({
-        success: false,
-        message: "Category ID is required",
-      });
-    }
-
-    if (!name && !slug) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one field (name or slug) is required",
-      });
-    }
-
-    if (name && name.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name cannot be empty",
-      });
-    }
-
-    if (name && name.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name must be under 100 characters",
-      });
+    if (!user || (user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER)) {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     const updatedCategory = await CategoriesService.updateCategory(
       categoryId as string,
-      name?.trim(),
-      slug,
+      {
+        name: name?.trim(),
+        slug,
+        image,
+        description,
+      },
     );
 
     return res.status(200).json({
@@ -148,25 +105,15 @@ const updateCategory = async (req: Request, res: Response) => {
       data: updatedCategory,
     });
   } catch (error: any) {
-    console.error("Error in updateCategory controller:", error);
-
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    if (error.message.includes("already exists")) {
-      return res.status(409).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    return res.status(500).json({
+    console.error("Update controller error:", error);
+    const status = error.message.includes("not found")
+      ? 404
+      : error.message.includes("exists")
+        ? 409
+        : 500;
+    return res.status(status).json({
       success: false,
-      message: "Failed to update category",
+      message: error.message || "Failed to update category",
     });
   }
 };
@@ -179,10 +126,10 @@ const deleteCategory = async (req: Request, res: Response) => {
     const id = req.params.id;
     const user = req.user;
 
-    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
+    if (!user || (user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER)) {
       return res.status(403).json({
         success: false,
-        message: "Admin or Seller access required",
+        message: "Unauthorized: Admin or Seller access required",
       });
     }
 
@@ -193,7 +140,7 @@ const deleteCategory = async (req: Request, res: Response) => {
       });
     }
 
-    const data = await CategoriesService.deleteCategory(id as string, user.id);
+    const data = await CategoriesService.deleteCategory(id as string);
 
     return res.status(200).json({
       success: true,
@@ -203,26 +150,13 @@ const deleteCategory = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Error in deleteCategory controller:", error);
 
-    if (
-      error.message.includes("not found") ||
-      error.message.includes("unauthorized")
-    ) {
-      return res.status(404).json({
-        success: false,
-        message: error.message,
-      });
-    }
+    let statusCode = 500;
+    if (error.message.includes("not found")) statusCode = 404;
+    if (error.message.includes("linked medicines")) statusCode = 400;
 
-    if (error.message.includes("Cannot delete")) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    return res.status(500).json({
+    return res.status(statusCode).json({
       success: false,
-      message: "Failed to delete category",
+      message: error.message || "An error occurred while deleting the category",
     });
   }
 };
@@ -234,37 +168,23 @@ const getSingleCategory = async (req: Request, res: Response) => {
   try {
     const categoryId = req.params.id;
 
-    if (!categoryId) {
-      return res.status(400).json({
-        success: false,
-        message: "Category ID is required",
-      });
-    }
-
     const category = await CategoriesService.getSingleCategory(
       categoryId as string,
     );
 
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
     return res.status(200).json({
       success: true,
       message: "Category retrieved successfully",
-      data: category.id,
+      data: { category },
     });
   } catch (error: any) {
-    console.error("Error in getSingleCategory controller:", error);
-    return res.status(500).json({
+    return res.status(error.message.includes("not found") ? 404 : 500).json({
       success: false,
-      message: "Failed to fetch category details",
+      message: error.message || "Failed to fetch category details",
     });
   }
 };
+
 export const CategoriesController = {
   createCategories,
   getAllCategory,

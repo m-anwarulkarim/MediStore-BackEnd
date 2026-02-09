@@ -190,10 +190,7 @@ const updateMedicine = async (
     const user = req.user;
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     if (user.role !== ROLE.SELLER) {
@@ -204,7 +201,6 @@ const updateMedicine = async (
     }
 
     const { medicineId } = req.params;
-
     if (!medicineId) {
       return res.status(400).json({
         success: false,
@@ -212,7 +208,7 @@ const updateMedicine = async (
       });
     }
 
-    // Validate price if provided
+    //  Validate price if provided
     if (req.body.price !== undefined && req.body.price <= 0) {
       return res.status(400).json({
         success: false,
@@ -220,9 +216,30 @@ const updateMedicine = async (
       });
     }
 
+    //  Validate stock if provided
+    if (req.body.stock !== undefined && req.body.stock < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock must be a non-negative number",
+      });
+    }
+
+    //   user.id -> sellerProfile.id
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    if (!sellerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller profile not found",
+      });
+    }
+
     const updatedMedicine = await medicineService.updateMedicine({
       medicineId,
-      sellerId: user.id,
+      sellerId: sellerProfile.id, //  FIXED
       ...req.body,
     });
 
@@ -234,21 +251,16 @@ const updateMedicine = async (
   } catch (error: any) {
     console.error("Update medicine error:", error);
 
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message,
-      });
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
     }
 
     if (
-      error.message.includes("Unauthorized") ||
-      error.message.includes("already exists")
+      error.message?.includes("Unauthorized") ||
+      error.message?.includes("already exists") ||
+      error.message?.includes("Invalid")
     ) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
+      return res.status(400).json({ success: false, message: error.message });
     }
 
     return res.status(500).json({
@@ -257,7 +269,6 @@ const updateMedicine = async (
     });
   }
 };
-
 // ==========================
 // 5. Delete medicine
 // ==========================
@@ -266,10 +277,7 @@ const deleteMedicine = async (req: Request, res: Response) => {
     const user = req.user;
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     if (user.role !== ROLE.SELLER) {
@@ -279,7 +287,11 @@ const deleteMedicine = async (req: Request, res: Response) => {
       });
     }
 
-    const { medicineId } = req.params as any;
+    // ✅ normalize medicineId (TS + runtime safe)
+    const rawMedicineId = req.params.medicineId;
+    const medicineId = Array.isArray(rawMedicineId)
+      ? rawMedicineId[0]
+      : rawMedicineId;
 
     if (!medicineId) {
       return res.status(400).json({
@@ -288,9 +300,22 @@ const deleteMedicine = async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ get sellerProfile.id (IMPORTANT)
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    if (!sellerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller profile not found",
+      });
+    }
+
     const result = await medicineService.removeMedicine({
       medicineId,
-      sellerId: user.id,
+      sellerId: sellerProfile.id,
     });
 
     return res.status(200).json({
@@ -300,18 +325,12 @@ const deleteMedicine = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Delete medicine error:", error);
 
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message,
-      });
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
     }
 
-    if (error.message.includes("Unauthorized")) {
-      return res.status(403).json({
-        success: false,
-        message: error.message,
-      });
+    if (error.message?.includes("Unauthorized")) {
+      return res.status(403).json({ success: false, message: error.message });
     }
 
     return res.status(500).json({
@@ -320,8 +339,7 @@ const deleteMedicine = async (req: Request, res: Response) => {
     });
   }
 };
-
-// ✅ PATCH /api/medicines/:medicineId/stock
+//  PATCH /api/medicines/:medicineId/stock
 const updateStock = async (
   req: Request<{ medicineId: string }, {}, UpdateStockPayload>,
   res: Response,

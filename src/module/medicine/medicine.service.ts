@@ -186,16 +186,21 @@ const removeMedicine = async ({
   sellerId,
 }: {
   medicineId: string;
-  sellerId: string;
+  sellerId: string; // SellerProfile.id
 }) => {
   const medicine = await prisma.medicine.findUnique({
     where: { id: medicineId },
+    select: { id: true, sellerId: true, isActive: true },
   });
-  if (!medicine) throw new Error("Medicine not found");
-  if (medicine.sellerId !== sellerId)
-    throw new Error("Unauthorized: You can only delete your own medicines");
 
-  //  delete
+  if (!medicine || !medicine.isActive) {
+    throw new Error("Medicine not found");
+  }
+
+  if (medicine.sellerId !== sellerId) {
+    throw new Error("Unauthorized: You can only delete your own medicines");
+  }
+
   await prisma.medicine.update({
     where: { id: medicineId },
     data: { isActive: false },

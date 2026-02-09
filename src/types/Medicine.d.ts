@@ -7,7 +7,7 @@ export interface CreateMedicineInput {
   manufacturer: string;
   price: number;
   categoryId: string;
-  userId: string; // seller ID
+  userId: string;
   discountPrice?: number;
   dosageForm?: string;
   strength?: string;
@@ -40,6 +40,7 @@ export interface UpdateMedicinePayload {
   images?: string[];
   isActive?: boolean;
   isFeatured?: boolean;
+  stock?: number;
 }
 
 // ==============================
@@ -60,7 +61,7 @@ export interface CreateMedicinePayload {
 
 export interface UpdateMedicineInput {
   medicineId: string;
-  sellerId: string; // logged-in seller
+  sellerId: string;
   name?: string;
   description?: string;
   manufacturer?: string;
@@ -73,13 +74,16 @@ export interface UpdateMedicineInput {
   images?: string[];
   isActive?: boolean;
   isFeatured?: boolean;
+  stock?: number;
 }
+
+//  Stock endpoint types
 export type UpdateStockPayload = {
   stock: number;
 };
 
 export type UpdateStockInput = {
   medicineId: string;
-  sellerId: string; // SellerProfile.id
+  sellerId: string;
   stock: number;
 };

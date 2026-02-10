@@ -1,3 +1,4 @@
+import { ORDER_STATUS } from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import type { CreateReviewPayload } from "../../types/reviews";
 
@@ -46,7 +47,7 @@ const createReview = async ({
   }
 
   // 4. Check if order is delivered (optional but recommended)
-  if (orderItem.order.status !== "DELIVERED") {
+  if (orderItem.order.status !== ORDER_STATUS.DELIVERED) {
     throw new Error("You can only review after the order is delivered");
   }
 
@@ -60,34 +61,39 @@ const createReview = async ({
   }
 
   // 6. Create review
-  const review = await prisma.review.create({
-    data: {
-      userId,
-      medicineId,
-      orderId,
-      rating,
-      comment: comment.trim(),
-      isVerified: true, // Verified because linked to order
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
+  const review = await prisma.$transaction(async (tx) => {
+    const created = await tx.review.create({
+      data: {
+        userId,
+        medicineId,
+        orderId,
+        rating,
+        comment: comment?.trim() || null,
+        isVerified: true,
       },
-      medicine: {
-        select: {
-          id: true,
-          name: true,
-        },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        medicine: { select: { id: true, name: true } },
       },
-    },
-  });
+    });
 
-  // 7. Update medicine average rating (optional but nice to have)
-  await updateMedicineRating(medicineId);
+    // update rating using tx
+    const result = await tx.review.aggregate({
+      where: { medicineId },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    const avg = result._avg.rating;
+    const count = result._count.rating;
+
+    await tx.medicine.update({
+      where: { id: medicineId },
+      data: { rating: count === 0 ? null : Math.round((avg ?? 0) * 10) / 10 },
+    });
+
+    return created;
+  });
 
   return review;
 };
@@ -96,28 +102,22 @@ const createReview = async ({
 // Helper: Update medicine average rating
 // =============================
 const updateMedicineRating = async (medicineId: string) => {
-  const reviews = await prisma.review.findMany({
+  const result = await prisma.review.aggregate({
     where: { medicineId },
-    select: { rating: true },
+    _avg: { rating: true },
+    _count: { rating: true },
   });
 
-  if (reviews.length === 0) {
-    await prisma.medicine.update({
-      where: { id: medicineId },
-      data: { rating: null },
-    });
-    return;
-  }
-
-  const avgRating =
-    reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+  const avg = result._avg.rating;
+  const count = result._count.rating;
 
   await prisma.medicine.update({
     where: { id: medicineId },
-    data: { rating: Math.round(avgRating * 10) / 10 }, // Round to 1 decimal
+    data: {
+      rating: count === 0 ? null : Math.round((avg ?? 0) * 10) / 10,
+    },
   });
 };
-
 // =============================
 // Get all reviews for a medicine
 // =============================
@@ -241,10 +241,24 @@ const updateReview = async (
   return updatedReview;
 };
 
+const getMyReview = async (
+  userId: string,
+  orderId: string,
+  medicineId: string,
+) => {
+  return prisma.review.findFirst({
+    where: {
+      userId,
+      orderId,
+      medicineId,
+    },
+  });
+};
 export const reviewService = {
   createReview,
   getMedicineReviews,
   getSellerReviews,
   deleteReview,
   updateReview,
+  getMyReview,
 };

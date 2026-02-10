@@ -192,9 +192,9 @@ const getUserOrders = async (userId: string) => {
 // =======================
 // Get seller orders
 // =======================
-const getSellerOrders = async (sellerId: string) => {
+const getSellerOrders = async (sellerProfileId: string) => {
   const orderItems = await prisma.orderItem.findMany({
-    where: { medicine: { sellerId } },
+    where: { medicine: { sellerId: sellerProfileId } },
     include: {
       order: {
         include: {
@@ -216,20 +216,31 @@ const getSellerOrders = async (sellerId: string) => {
     orderBy: { createdAt: "desc" },
   });
 
-  // Group by orderId
   const grouped: Record<string, any> = {};
-  orderItems.forEach((item) => {
+
+  for (const item of orderItems) {
     const orderId = item.orderId;
+
     if (!grouped[orderId]) {
       grouped[orderId] = {
         ...item.order,
         orderItems: [],
       };
     }
+
     grouped[orderId].orderItems.push(item);
+  }
+
+  const result = Object.values(grouped);
+
+  //  sort by order createdAt (latest orders first)
+  result.sort((a: any, b: any) => {
+    const da = new Date(a.createdAt).getTime();
+    const db = new Date(b.createdAt).getTime();
+    return db - da;
   });
 
-  return Object.values(grouped);
+  return result;
 };
 
 // =======================
@@ -285,26 +296,24 @@ const updateOrderStatus = async ({
       }
     }
 
-    // SELLER rules
     if (userRole === ROLE.SELLER) {
-      // Check if seller has items in this order
+      //  userId এখানে sellerProfile.id হওয়া লাগবে
       const sellerItem = await tx.orderItem.findFirst({
         where: {
           orderId,
           medicine: { sellerId: userId },
         },
+        select: { id: true },
       });
 
       if (!sellerItem) {
         throw new Error("Unauthorized to update this order");
       }
 
-      // Seller cannot cancel orders
       if (status === ORDER_STATUS.CANCELLED) {
         throw new Error("Sellers cannot cancel orders");
       }
 
-      // Seller can only move forward in the workflow
       const allowedSellerStatuses = [
         ORDER_STATUS.CONFIRMED,
         ORDER_STATUS.PROCESSING,

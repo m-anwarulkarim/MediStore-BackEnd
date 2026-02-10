@@ -12,6 +12,7 @@ import { OrderRouter } from "./module/order/orders.route";
 import { addressRouter } from "./module/Address/address.route";
 import { cartItemRouter } from "./module/cartItem/cartItem.route";
 import { ReviewRouter } from "./module/reviews/reviews.route";
+import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
 
 const app = express();
 
@@ -47,7 +48,8 @@ app.get("/", async (req: Request, res: Response) => {
 // ------------------- Public Routes -------------------
 app.use("/api/categories", categoriesRouter);
 app.use("/api/medicines", medicineRouter);
-
+app.use("/api/products", medicineRouter);
+app.use("/api/manufacturers", manufacturerRouter);
 // ------------------- User/Auth Routes -------------------
 app.use("/api", userRouter);
 

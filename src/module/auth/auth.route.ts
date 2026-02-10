@@ -33,5 +33,7 @@ router.patch(
   authGuard(ROLE.ADMIN),
   userController.updateUserRole,
 );
+router.get("/users/me/profile", authGuard(), userController.getMyProfile);
+router.patch("/users/me/profile", authGuard(), userController.updateMyProfile);
 
 export const userRouter = router;

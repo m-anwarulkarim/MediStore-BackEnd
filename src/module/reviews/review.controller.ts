@@ -1,25 +1,11 @@
 import type { Request, Response } from "express";
 import { reviewService } from "./reviews.service";
-import { ROLE } from "../../generated/prisma/enums";
 
-// =============================
-// 1. Create a review (Customer only)
-// =============================
-
+// 1. Create review
 const createReview = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
+    const user = req.user!;
     const { medicineId, orderId, rating, comment } = req.body;
-
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    if (user.role !== ROLE.CUSTOMER) {
-      return res
-        .status(403)
-        .json({ message: "Only customers can create reviews" });
-    }
 
     const review = await reviewService.createReview({
       userId: user.id,
@@ -29,22 +15,17 @@ const createReview = async (req: Request, res: Response) => {
       comment,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Review submitted successfully",
       data: review,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// =============================
-// 2. Get all reviews for a medicine
-// =============================
+// 2. Get medicine reviews
 const getMedicineReviews = async (req: Request, res: Response) => {
   try {
     const { medicineId } = req.params;
@@ -53,68 +34,80 @@ const getMedicineReviews = async (req: Request, res: Response) => {
       medicineId as string,
     );
 
-    res.status(200).json({
-      success: true,
-      data: reviews,
-    });
+    return res.status(200).json({ success: true, data: reviews });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// =============================
-// 3. Get all reviews for a seller
-// =============================
+// 3. Seller reviews
 const getSellerReviews = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
-
-    if (!user || user.role !== ROLE.SELLER) {
-      return res
-        .status(403)
-        .json({ message: "Only sellers can view their reviews" });
-    }
-
+    const user = req.user!;
     const reviews = await reviewService.getSellerReviews(user.id);
 
-    res.status(200).json({
-      success: true,
-      data: reviews,
-    });
+    return res.status(200).json({ success: true, data: reviews });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// =============================
-// 4. Delete a review (Admin only)
-// =============================
+// 4. Delete review
 const deleteReview = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
     const { reviewId } = req.params;
-
-    if (!user || user.role !== ROLE.ADMIN) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
 
     await reviewService.deleteReview(reviewId as string);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Review deleted successfully",
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// 5. Update own review
+const updateReview = async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+    const { reviewId } = req.params;
+    const { rating, comment } = req.body;
+
+    const updated = await reviewService.updateReview(
+      reviewId as string,
+      user.id,
+      rating,
+      comment,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Review updated successfully",
+      data: updated,
     });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+const getMyReview = async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+    const { orderId, medicineId } = req.query;
+
+    const review = await reviewService.getMyReview(
+      user.id,
+      String(orderId),
+      String(medicineId),
+    );
+
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -123,4 +116,6 @@ export const reviewController = {
   getMedicineReviews,
   getSellerReviews,
   deleteReview,
+  updateReview,
+  getMyReview,
 };

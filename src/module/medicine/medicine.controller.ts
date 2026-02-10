@@ -90,6 +90,9 @@ const createMedicine = async (
 // ==========================
 // 2. Get all medicines (with filters)
 // ==========================
+// ==========================
+// 2. Get all medicines (with filters)
+// ==========================
 const getAllMedicine = async (req: Request, res: Response) => {
   try {
     const {
@@ -102,18 +105,44 @@ const getAllMedicine = async (req: Request, res: Response) => {
       search,
       sortBy,
       sortOrder,
+      manufacturer,
+      minPrice,
+      maxPrice,
     } = req.query;
+
+    const { isActive } = req.query;
+    const parsedIsActive =
+      isActive === "true" ? true : isActive === "false" ? false : undefined;
+
+    //  price parse (string -> number)
+    const parsedMinPrice =
+      minPrice != null && minPrice !== "" ? Number(minPrice) : undefined;
+
+    const parsedMaxPrice =
+      maxPrice != null && maxPrice !== "" ? Number(maxPrice) : undefined;
 
     const data = await medicineService.getAllMedicine({
       id: id as string,
       slug: slug as string,
       categoryId: categoryId as string,
       sellerId: sellerId as string,
+
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
+
       search: search as string,
+
+      manufacturer: manufacturer as string,
+      minPrice: Number.isFinite(parsedMinPrice as number)
+        ? parsedMinPrice
+        : undefined,
+      maxPrice: Number.isFinite(parsedMaxPrice as number)
+        ? parsedMaxPrice
+        : undefined,
+
       sortBy: (sortBy as string) || "createdAt",
       sortOrder: sortOrder === "asc" ? "asc" : "desc",
+      isActive: parsedIsActive,
     });
 
     return res.status(200).json({
@@ -127,6 +156,50 @@ const getAllMedicine = async (req: Request, res: Response) => {
       success: false,
       message: "Failed to fetch medicines",
     });
+  }
+};
+
+const getMyMedicines = async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    if (!sellerProfile)
+      return res
+        .status(404)
+        .json({ success: false, message: "Seller profile not found" });
+
+    const { categoryId, page, limit, search, sortBy, sortOrder, isActive } =
+      req.query;
+
+    const parsedIsActive =
+      isActive === "true" ? true : isActive === "false" ? false : undefined;
+
+    const data = await medicineService.getAllMedicine({
+      sellerId: sellerProfile.id,
+      categoryId: categoryId as string,
+      isActive: parsedIsActive,
+      page: page ? parseInt(page as string) : 1,
+      limit: limit ? parseInt(limit as string) : 10,
+      search: search as string,
+      sortBy: (sortBy as string) || "createdAt",
+      sortOrder: sortOrder === "asc" ? "asc" : "desc",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Seller medicines fetched successfully",
+      ...data,
+    });
+  } catch (e: any) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch seller medicines" });
   }
 };
 
@@ -287,7 +360,7 @@ const deleteMedicine = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ normalize medicineId (TS + runtime safe)
+    //  normalize medicineId (TS + runtime safe)
     const rawMedicineId = req.params.medicineId;
     const medicineId = Array.isArray(rawMedicineId)
       ? rawMedicineId[0]
@@ -300,7 +373,7 @@ const deleteMedicine = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ get sellerProfile.id (IMPORTANT)
+    //  get sellerProfile.id (IMPORTANT)
     const sellerProfile = await prisma.sellerProfile.findUnique({
       where: { userId: user.id },
       select: { id: true },
@@ -417,4 +490,5 @@ export const medicineController = {
   updateMedicine,
   deleteMedicine,
   updateStock,
+  getMyMedicines,
 };

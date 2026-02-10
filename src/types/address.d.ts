@@ -1,20 +1,22 @@
-// service type
-export interface CreateAddressInput {
+export type CreateAddressInput = {
   userId: string;
   fullName: string;
-  phone: string;
   country?: string;
-  city: string;
-  state: string;
-  area?: string;
-  postalCode: string;
-  addressLine: string;
-  label?: string;
   isDefault?: boolean;
-}
-export interface UpdateAddressInput {
+
+  phone?: string;
+  city?: string;
+  state?: string;
+  area?: string;
+  postalCode?: string;
+  addressLine?: string;
+  label?: string;
+};
+
+export type UpdateAddressInput = {
   id: string;
   userId: string;
+
   fullName?: string;
   phone?: string;
   country?: string;
@@ -25,4 +27,4 @@ export interface UpdateAddressInput {
   addressLine?: string;
   label?: string;
   isDefault?: boolean;
-}
+};

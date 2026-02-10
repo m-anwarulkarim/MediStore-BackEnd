@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { userService } from "./auth.service";
 import { ROLE, USER_STATUS } from "../../generated/prisma/enums";
+import { prisma } from "../../lib/prisma";
 
 // ==========================
 // 1. Get all users (ADMIN only)
@@ -243,6 +244,63 @@ const updateUserRole = async (req: Request, res: Response) => {
     data: result,
   });
 };
+
+const getMyProfile = async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const data = await userService.getCurrentUser(user.id); // reuse
+    if (!data) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "My profile fetched successfully",
+      data,
+    });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Failed" });
+  }
+};
+
+const updateMyProfile = async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { name, phone, image } = req.body;
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: name?.trim(),
+        phone: phone?.trim(),
+        image,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updated,
+    });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Failed" });
+  }
+};
+
 export const userController = {
   getAllUsers,
   getCurrentUser,
@@ -250,4 +308,6 @@ export const userController = {
   deleteUserByAdmin,
   deleteMyAccount,
   updateUserRole,
+  updateMyProfile,
+  getMyProfile,
 };

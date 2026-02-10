@@ -51,20 +51,11 @@ const createCategories = async (
 const getAllCategory = async () => {
   try {
     const categories = await prisma.category.findMany({
-      where: {
-        isActive: true,
-      },
+      where: { isActive: true },
       include: {
-        medicines: true,
-        _count: {
-          select: {
-            medicines: true,
-          },
-        },
+        _count: { select: { medicines: true } },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     });
 
     return categories;

@@ -2,11 +2,24 @@ import type { Request, Response } from "express";
 import { addressService } from "./address.service";
 import { ROLE } from "../../generated/prisma/enums";
 
+const cleanOptionalString = (v: unknown) => {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  return s.length ? s : undefined;
+};
+
+const cleanRequiredString = (v: unknown) => {
+  if (typeof v !== "string") return "";
+  return v.trim();
+};
+
 // ==========================
 // 1. Create address
 // ==========================
 const createAddress = async (req: Request, res: Response) => {
   try {
+    console.log("REQ state:", req.body.state, typeof req.body.state);
+
     const user = req.user;
 
     if (!user) {
@@ -16,14 +29,15 @@ const createAddress = async (req: Request, res: Response) => {
       });
     }
 
-    const { fullName, phone, city, area, postalCode, addressLine } = req.body;
+    const fullName = cleanRequiredString(req.body.fullName);
+    const phone = cleanRequiredString(req.body.phone);
+    const city = cleanRequiredString(req.body.city);
+    const addressLine = cleanRequiredString(req.body.addressLine);
 
-    // Validation
-    if (!fullName || !phone || !city || !area || !postalCode || !addressLine) {
+    if (!fullName || !phone || !city || !addressLine) {
       return res.status(400).json({
         success: false,
-        message:
-          "Required fields: fullName, phone, city, area, postalCode, addressLine",
+        message: "Required fields: fullName, phone, city, addressLine",
       });
     }
 
@@ -38,16 +52,19 @@ const createAddress = async (req: Request, res: Response) => {
 
     const address = await addressService.createAddress({
       userId: user.id,
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      country: req.body.country || "Bangladesh",
-      city: city.trim(),
-      state: req.body.state,
-      area: area.trim(),
-      postalCode: postalCode.trim(),
-      addressLine: addressLine.trim(),
-      label: req.body.label,
-      isDefault: req.body.isDefault || false,
+      fullName,
+      phone,
+      country: cleanOptionalString(req.body.country) ?? "Bangladesh",
+      city,
+
+      //  optional fields (safe)
+      state: cleanOptionalString(req.body.state),
+      area: cleanOptionalString(req.body.area),
+      postalCode: cleanOptionalString(req.body.postalCode),
+      label: cleanOptionalString(req.body.label),
+
+      addressLine,
+      isDefault: Boolean(req.body.isDefault),
     });
 
     return res.status(201).json({
@@ -79,7 +96,6 @@ const updateAddress = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
-
     if (!addressId) {
       return res.status(400).json({
         success: false,
@@ -90,16 +106,21 @@ const updateAddress = async (req: Request, res: Response) => {
     const updatedAddress = await addressService.updateAddress({
       id: addressId as string,
       userId: user.id,
-      fullName: req.body.fullName,
-      phone: req.body.phone,
-      country: req.body.country,
-      city: req.body.city,
-      state: req.body.state,
-      area: req.body.area,
-      postalCode: req.body.postalCode,
-      addressLine: req.body.addressLine,
-      label: req.body.label,
-      isDefault: req.body.isDefault,
+
+      fullName: cleanOptionalString(req.body.fullName),
+      phone: cleanOptionalString(req.body.phone),
+      country: cleanOptionalString(req.body.country),
+      city: cleanOptionalString(req.body.city),
+      state: cleanOptionalString(req.body.state),
+      area: cleanOptionalString(req.body.area),
+      postalCode: cleanOptionalString(req.body.postalCode),
+      addressLine: cleanOptionalString(req.body.addressLine),
+      label: cleanOptionalString(req.body.label),
+
+      isDefault:
+        typeof req.body.isDefault === "boolean"
+          ? req.body.isDefault
+          : undefined,
     });
 
     return res.status(200).json({
@@ -142,7 +163,6 @@ const deleteAddress = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
-
     if (!addressId) {
       return res.status(400).json({
         success: false,
@@ -255,7 +275,6 @@ const getMyAddressById = async (req: Request, res: Response) => {
     }
 
     const addressId = req.params.id;
-
     if (!addressId) {
       return res.status(400).json({
         success: false,

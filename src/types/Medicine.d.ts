@@ -15,17 +15,25 @@ export interface CreateMedicineInput {
   images?: string[];
 }
 
-export interface GetMedicineInput {
+export type GetMedicineInput = {
   id?: string;
   slug?: string;
   categoryId?: string;
   sellerId?: string;
+  isActive?: boolean;
+
   page?: number;
   limit?: number;
+
   search?: string;
+
+  manufacturer?: string;
+  minPrice?: number;
+  maxPrice?: number;
+
   sortBy?: string;
   sortOrder?: "asc" | "desc";
-}
+};
 
 export interface UpdateMedicinePayload {
   name?: string;

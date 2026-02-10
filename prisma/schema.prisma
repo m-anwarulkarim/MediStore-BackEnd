@@ -215,13 +215,13 @@ model Address {
   userId      String
   fullName    String
   label       String? // Home, Office, etc.
-  phone       String
+  phone       String?
   country     String  @default("Bangladesh")
-  city        String
-  state       String
+  city        String?
+  state       String?
   area        String?
-  postalCode  String
-  addressLine String
+  postalCode  String?
+  addressLine String?
   isDefault   Boolean @default(false)
 
   createdAt DateTime @default(now())

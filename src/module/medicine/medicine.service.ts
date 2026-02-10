@@ -73,25 +73,47 @@ const getAllMedicine = async ({
   slug,
   categoryId,
   sellerId,
+  isActive,
   page = 1,
   limit = 10,
   search,
+
+  manufacturer,
+  minPrice,
+  maxPrice,
   sortBy = "createdAt",
   sortOrder = "desc",
 }: GetMedicineInput) => {
   if (page < 1) page = 1;
   if (limit < 1) limit = 10;
 
-  const where: any = { isActive: true };
+  const where: any = {};
+  where.isActive = typeof isActive === "boolean" ? isActive : true;
+
   if (id) where.id = id;
   if (slug) where.slug = slug;
   if (categoryId) where.categoryId = categoryId;
   if (sellerId) where.sellerId = sellerId;
-  if (search)
+
+  if (manufacturer) {
+    where.manufacturer = { contains: manufacturer, mode: "insensitive" };
+
+    // where.manufacturer = { equals: manufacturer, mode: "insensitive" };
+  }
+
+  // price range
+  if (minPrice != null || maxPrice != null) {
+    where.price = {};
+    if (minPrice != null) where.price.gte = minPrice;
+    if (maxPrice != null) where.price.lte = maxPrice;
+  }
+
+  if (search) {
     where.OR = [
       { name: { contains: search, mode: "insensitive" } },
       { manufacturer: { contains: search, mode: "insensitive" } },
     ];
+  }
 
   const skip = (page - 1) * limit;
 

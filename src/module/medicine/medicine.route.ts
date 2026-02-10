@@ -8,6 +8,12 @@ const router = Router();
 // Public: Get all medicines (with filters, search, pagination)
 router.get("/", medicineController.getAllMedicine);
 
+router.get(
+  "/seller/my",
+  authGuard(ROLE.SELLER),
+  medicineController.getMyMedicines,
+);
+
 // Public: Get single medicine details
 router.get("/:medicineId", medicineController.getMedicineDetails);
 

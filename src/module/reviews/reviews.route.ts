@@ -11,6 +11,13 @@ router.get("/medicine/:medicineId", reviewController.getMedicineReviews);
 // Customer: Create a review
 router.post("/", authGuard(ROLE.CUSTOMER), reviewController.createReview);
 
+// Customer: Update own review
+router.patch(
+  "/:reviewId",
+  authGuard(ROLE.CUSTOMER),
+  reviewController.updateReview,
+);
+
 // Seller: Get all reviews for their medicines
 router.get(
   "/seller/all",
@@ -24,5 +31,6 @@ router.delete(
   authGuard(ROLE.ADMIN),
   reviewController.deleteReview,
 );
+router.get("/my", authGuard(ROLE.CUSTOMER), reviewController.getMyReview);
 
 export const ReviewRouter = router;

@@ -17,9 +17,17 @@ import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
 const app = express();
 
 // ------------------- CORS -------------------
+const allowedOrigins = [env.FRONT_END_URL, "http://localhost:3000"].filter(
+  Boolean,
+);
+
 app.use(
   cors({
-    origin: ["http://localhost:3000"],
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],

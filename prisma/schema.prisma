@@ -116,28 +116,28 @@ model Category {
 }
 
 model Medicine {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   name                 String
   slug                 String
   description          String
   manufacturer         String
-  price                Decimal  @db.Decimal(10, 2)
-  discountPrice        Decimal? @db.Decimal(10, 2)
-  stock                Int      @default(0)
-  dosageForm           String?  
-  strength             String?  
-  prescriptionRequired Boolean  @default(false)
+  price                Decimal   @db.Decimal(10, 2)
+  discountPrice        Decimal?  @db.Decimal(10, 2)
+  stock                Int       @default(0)
+  dosageForm           String?
+  strength             String?
+  prescriptionRequired Boolean   @default(false)
   categoryId           String
   sellerId             String
   image                String?
   images               String[]
-  isActive             Boolean  @default(true)
-  isFeatured           Boolean  @default(false)
-  tags                 String[]   
-  rating               Decimal?   @db.Decimal(2, 1)
-  views                Int?       @default(0)
-  metaDescription      String?    
-  deletedAt            DateTime?  
+  isActive             Boolean   @default(true)
+  isFeatured           Boolean   @default(false)
+  tags                 String[]
+  rating               Decimal?  @db.Decimal(2, 1)
+  views                Int?      @default(0)
+  metaDescription      String?
+  deletedAt            DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,10 +155,9 @@ model Medicine {
   @@index([categoryId])
   @@index([sellerId])
   @@index([isActive])
-  @@index([name])          // For search by name
-  @@index([manufacturer])  // For search by manufacturer
+  @@index([name]) // For search by name
+  @@index([manufacturer]) // For search by manufacturer
 }
-
 
 // ==================
 // Cart Item

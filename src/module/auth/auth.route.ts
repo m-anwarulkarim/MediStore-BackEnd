@@ -35,5 +35,7 @@ router.patch(
 );
 router.get("/users/me/profile", authGuard(), userController.getMyProfile);
 router.patch("/users/me/profile", authGuard(), userController.updateMyProfile);
+// Logout current user
+router.post("/users/logout", authGuard(), userController.logoutUser);
 
 export const userRouter = router;

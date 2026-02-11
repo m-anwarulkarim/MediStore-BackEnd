@@ -301,6 +301,22 @@ const updateMyProfile = async (req: Request, res: Response) => {
   }
 };
 
+const logoutUser = async (req: Request, res: Response) => {
+  const isProd = process.env.NODE_ENV === "production";
+
+  res.clearCookie("better-auth.session_token", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Logged out successfully",
+  });
+};
+
 export const userController = {
   getAllUsers,
   getCurrentUser,
@@ -310,4 +326,5 @@ export const userController = {
   updateUserRole,
   updateMyProfile,
   getMyProfile,
+  logoutUser,
 };

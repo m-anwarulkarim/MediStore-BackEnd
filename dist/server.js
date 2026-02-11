@@ -364,14 +364,14 @@ var getCurrentUser = async (id) => {
     throw new Error("Failed to fetch users from database");
   }
 };
-var updatedUser = async (id, status) => {
+var updatedUser = async (id, status2) => {
   try {
     const result = await prisma.user.update({
       where: {
         id
       },
       data: {
-        status
+        status: status2
       }
     });
     return result;
@@ -394,11 +394,39 @@ var deleteUser = async (userId) => {
     }
   });
 };
+var updateUserRoleAndInitSellerProfile = async (id, role) => {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id } });
+    if (!user) throw new Error("User not found");
+    if (user.status !== USER_STATUS.ACTIVE)
+      throw new Error("User is not active");
+    const updatedUser2 = await tx.user.update({
+      where: { id },
+      data: { role }
+    });
+    if (role === ROLE.SELLER) {
+      const existingProfile = await tx.sellerProfile.findUnique({
+        where: { userId: id }
+      });
+      if (!existingProfile) {
+        await tx.sellerProfile.create({
+          data: {
+            userId: id,
+            shopName: user.name ? `${user.name}'s Shop` : "My Shop",
+            shopDescription: ""
+          }
+        });
+      }
+    }
+    return updatedUser2;
+  });
+};
 var userService = {
   getAllUsers,
   getCurrentUser,
   updatedUser,
-  deleteUser
+  deleteUser,
+  updateUserRoleAndInitSellerProfile
 };
 
 // src/module/auth/auth.controller.ts
@@ -463,14 +491,14 @@ var getCurrentUser2 = async (req, res) => {
 var updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    if (!id || !status) {
+    const { status: status2 } = req.body;
+    if (!id || !status2) {
       return res.status(400).json({
         success: false,
         message: "User ID and status are required"
       });
     }
-    if (!Object.values(USER_STATUS).includes(status)) {
+    if (!Object.values(USER_STATUS).includes(status2)) {
       return res.status(400).json({
         success: false,
         message: "Invalid status value",
@@ -483,7 +511,7 @@ var updateUser = async (req, res) => {
         message: "Admin access required"
       });
     }
-    const data = await userService.updatedUser(id, status);
+    const data = await userService.updatedUser(id, status2);
     if (!data) {
       return res.status(404).json({
         success: false,
@@ -578,12 +606,85 @@ var deleteMyAccount = async (req, res) => {
     });
   }
 };
+var updateUserRole = async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  const result = await userService.updateUserRoleAndInitSellerProfile(
+    id,
+    role
+  );
+  return res.status(200).json({
+    success: true,
+    message: "User role updated (seller profile initialized if needed)",
+    data: result
+  });
+};
+var getMyProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const data = await userService.getCurrentUser(user.id);
+    if (!data) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "My profile fetched successfully",
+      data
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed" });
+  }
+};
+var updateMyProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const { name, phone, image } = req.body;
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: name?.trim(),
+        phone: phone?.trim(),
+        image
+      }
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updated
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed" });
+  }
+};
+var logoutUser = async (req, res) => {
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie("better-auth.session_token", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/"
+  });
+  return res.status(200).json({
+    success: true,
+    message: "Logged out successfully"
+  });
+};
 var userController = {
   getAllUsers: getAllUsers2,
   getCurrentUser: getCurrentUser2,
   updateUser,
   deleteUserByAdmin,
-  deleteMyAccount
+  deleteMyAccount,
+  updateUserRole,
+  updateMyProfile,
+  getMyProfile,
+  logoutUser
 };
 
 // src/guard/auth.guard.ts
@@ -648,6 +749,14 @@ router.delete(
   userController.deleteUserByAdmin
 );
 router.delete("/users/me", auth_guard_default(), userController.deleteMyAccount);
+router.patch(
+  "/admin/users/:id/role",
+  auth_guard_default(ROLE.ADMIN),
+  userController.updateUserRole
+);
+router.get("/users/me/profile", auth_guard_default(), userController.getMyProfile);
+router.patch("/users/me/profile", auth_guard_default(), userController.updateMyProfile);
+router.post("/users/logout", auth_guard_default(), userController.logoutUser);
 var userRouter = router;
 
 // src/module/medicine/medicine.route.ts
@@ -708,24 +817,38 @@ var getAllMedicine = async ({
   slug,
   categoryId,
   sellerId,
+  isActive,
   page = 1,
   limit = 10,
   search,
+  manufacturer,
+  minPrice,
+  maxPrice,
   sortBy = "createdAt",
   sortOrder = "desc"
 }) => {
   if (page < 1) page = 1;
   if (limit < 1) limit = 10;
-  const where = { isActive: true };
+  const where = {};
+  where.isActive = typeof isActive === "boolean" ? isActive : true;
   if (id) where.id = id;
   if (slug) where.slug = slug;
   if (categoryId) where.categoryId = categoryId;
   if (sellerId) where.sellerId = sellerId;
-  if (search)
+  if (manufacturer) {
+    where.manufacturer = { contains: manufacturer, mode: "insensitive" };
+  }
+  if (minPrice != null || maxPrice != null) {
+    where.price = {};
+    if (minPrice != null) where.price.gte = minPrice;
+    if (maxPrice != null) where.price.lte = maxPrice;
+  }
+  if (search) {
     where.OR = [
       { name: { contains: search, mode: "insensitive" } },
       { manufacturer: { contains: search, mode: "insensitive" } }
     ];
+  }
   const skip = (page - 1) * limit;
   const [medicines, total] = await Promise.all([
     prisma.medicine.findMany({
@@ -794,11 +917,15 @@ var removeMedicine = async ({
   sellerId
 }) => {
   const medicine = await prisma.medicine.findUnique({
-    where: { id: medicineId }
+    where: { id: medicineId },
+    select: { id: true, sellerId: true, isActive: true }
   });
-  if (!medicine) throw new Error("Medicine not found");
-  if (medicine.sellerId !== sellerId)
+  if (!medicine || !medicine.isActive) {
+    throw new Error("Medicine not found");
+  }
+  if (medicine.sellerId !== sellerId) {
     throw new Error("Unauthorized: You can only delete your own medicines");
+  }
   await prisma.medicine.update({
     where: { id: medicineId },
     data: { isActive: false }
@@ -824,12 +951,33 @@ var getMedicineDetails = async (medicineId, reviewPage = 1, reviewLimit = 5) => 
   const totalReviews = await prisma.review.count({ where: { medicineId } });
   return { ...medicine, reviewPage, reviewLimit, totalReviews };
 };
+var updateStock = async ({
+  medicineId,
+  sellerId,
+  // SellerProfile.id
+  stock
+}) => {
+  const medicine = await prisma.medicine.findUnique({
+    where: { id: medicineId },
+    select: { id: true, sellerId: true, isActive: true, stock: true }
+  });
+  if (!medicine || !medicine.isActive) throw new Error("Medicine not found");
+  if (medicine.sellerId !== sellerId) {
+    throw new Error("Unauthorized: You can only update your own medicines");
+  }
+  const updated = await prisma.medicine.update({
+    where: { id: medicineId },
+    data: { stock }
+  });
+  return updated;
+};
 var medicineService = {
   createMedicine,
   getAllMedicine,
   updateMedicine,
   removeMedicine,
-  getMedicineDetails
+  getMedicineDetails,
+  updateStock
 };
 
 // src/module/medicine/medicine.controller.ts
@@ -901,8 +1049,15 @@ var getAllMedicine2 = async (req, res) => {
       limit,
       search,
       sortBy,
-      sortOrder
+      sortOrder,
+      manufacturer,
+      minPrice,
+      maxPrice
     } = req.query;
+    const { isActive } = req.query;
+    const parsedIsActive = isActive === "true" ? true : isActive === "false" ? false : void 0;
+    const parsedMinPrice = minPrice != null && minPrice !== "" ? Number(minPrice) : void 0;
+    const parsedMaxPrice = maxPrice != null && maxPrice !== "" ? Number(maxPrice) : void 0;
     const data = await medicineService.getAllMedicine({
       id,
       slug,
@@ -911,8 +1066,12 @@ var getAllMedicine2 = async (req, res) => {
       page: page ? parseInt(page) : void 0,
       limit: limit ? parseInt(limit) : void 0,
       search,
+      manufacturer,
+      minPrice: Number.isFinite(parsedMinPrice) ? parsedMinPrice : void 0,
+      maxPrice: Number.isFinite(parsedMaxPrice) ? parsedMaxPrice : void 0,
       sortBy: sortBy || "createdAt",
-      sortOrder: sortOrder === "asc" ? "asc" : "desc"
+      sortOrder: sortOrder === "asc" ? "asc" : "desc",
+      isActive: parsedIsActive
     });
     return res.status(200).json({
       success: true,
@@ -925,6 +1084,38 @@ var getAllMedicine2 = async (req, res) => {
       success: false,
       message: "Failed to fetch medicines"
     });
+  }
+};
+var getMyMedicines = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!sellerProfile)
+      return res.status(404).json({ success: false, message: "Seller profile not found" });
+    const { categoryId, page, limit, search, sortBy, sortOrder, isActive } = req.query;
+    const parsedIsActive = isActive === "true" ? true : isActive === "false" ? false : void 0;
+    const data = await medicineService.getAllMedicine({
+      sellerId: sellerProfile.id,
+      categoryId,
+      isActive: parsedIsActive,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      search,
+      sortBy: sortBy || "createdAt",
+      sortOrder: sortOrder === "asc" ? "asc" : "desc"
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Seller medicines fetched successfully",
+      ...data
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: "Failed to fetch seller medicines" });
   }
 };
 var getMedicineDetails2 = async (req, res) => {
@@ -966,10 +1157,7 @@ var updateMedicine2 = async (req, res) => {
   try {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized"
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
     if (user.role !== ROLE.SELLER) {
       return res.status(403).json({
@@ -990,9 +1178,26 @@ var updateMedicine2 = async (req, res) => {
         message: "Price must be greater than 0"
       });
     }
+    if (req.body.stock !== void 0 && req.body.stock < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock must be a non-negative number"
+      });
+    }
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!sellerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller profile not found"
+      });
+    }
     const updatedMedicine = await medicineService.updateMedicine({
       medicineId,
-      sellerId: user.id,
+      sellerId: sellerProfile.id,
+      //  FIXED
       ...req.body
     });
     return res.status(200).json({
@@ -1002,17 +1207,11 @@ var updateMedicine2 = async (req, res) => {
     });
   } catch (error) {
     console.error("Update medicine error:", error);
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
     }
-    if (error.message.includes("Unauthorized") || error.message.includes("already exists")) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
+    if (error.message?.includes("Unauthorized") || error.message?.includes("already exists") || error.message?.includes("Invalid")) {
+      return res.status(400).json({ success: false, message: error.message });
     }
     return res.status(500).json({
       success: false,
@@ -1024,10 +1223,7 @@ var deleteMedicine = async (req, res) => {
   try {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized"
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
     if (user.role !== ROLE.SELLER) {
       return res.status(403).json({
@@ -1035,16 +1231,27 @@ var deleteMedicine = async (req, res) => {
         message: "Only sellers can delete medicines"
       });
     }
-    const { medicineId } = req.params;
+    const rawMedicineId = req.params.medicineId;
+    const medicineId = Array.isArray(rawMedicineId) ? rawMedicineId[0] : rawMedicineId;
     if (!medicineId) {
       return res.status(400).json({
         success: false,
         message: "Medicine ID is required"
       });
     }
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!sellerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller profile not found"
+      });
+    }
     const result = await medicineService.removeMedicine({
       medicineId,
-      sellerId: user.id
+      sellerId: sellerProfile.id
     });
     return res.status(200).json({
       success: true,
@@ -1052,17 +1259,11 @@ var deleteMedicine = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete medicine error:", error);
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
     }
-    if (error.message.includes("Unauthorized")) {
-      return res.status(403).json({
-        success: false,
-        message: error.message
-      });
+    if (error.message?.includes("Unauthorized")) {
+      return res.status(403).json({ success: false, message: error.message });
     }
     return res.status(500).json({
       success: false,
@@ -1070,17 +1271,71 @@ var deleteMedicine = async (req, res) => {
     });
   }
 };
+var updateStock2 = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    if (user.role !== ROLE.SELLER) {
+      return res.status(403).json({ success: false, message: "Only sellers can update stock" });
+    }
+    const { medicineId } = req.params;
+    const { stock } = req.body;
+    if (!medicineId) {
+      return res.status(400).json({ success: false, message: "Medicine ID is required" });
+    }
+    if (typeof stock !== "number" || Number.isNaN(stock) || stock < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock must be a non-negative number"
+      });
+    }
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!sellerProfile) {
+      return res.status(404).json({ success: false, message: "Seller profile not found" });
+    }
+    const updated = await medicineService.updateStock({
+      medicineId,
+      sellerId: sellerProfile.id,
+      stock
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Stock updated successfully",
+      data: updated
+    });
+  } catch (error) {
+    if (error.message?.includes("not found")) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    if (error.message?.includes("Unauthorized")) {
+      return res.status(403).json({ success: false, message: error.message });
+    }
+    return res.status(500).json({ success: false, message: "Failed to update stock" });
+  }
+};
 var medicineController = {
   createMedicine: createMedicine2,
   getAllMedicine: getAllMedicine2,
   getMedicineDetails: getMedicineDetails2,
   updateMedicine: updateMedicine2,
-  deleteMedicine
+  deleteMedicine,
+  updateStock: updateStock2,
+  getMyMedicines
 };
 
 // src/module/medicine/medicine.route.ts
 var router2 = Router2();
 router2.get("/", medicineController.getAllMedicine);
+router2.get(
+  "/seller/my",
+  auth_guard_default(ROLE.SELLER),
+  medicineController.getMyMedicines
+);
 router2.get("/:medicineId", medicineController.getMedicineDetails);
 router2.post("/", auth_guard_default(ROLE.SELLER), medicineController.createMedicine);
 router2.put(
@@ -1092,6 +1347,11 @@ router2.delete(
   "/:medicineId",
   auth_guard_default(ROLE.SELLER),
   medicineController.deleteMedicine
+);
+router2.patch(
+  "/:medicineId/stock",
+  auth_guard_default(ROLE.SELLER),
+  medicineController.updateStock
 );
 var medicineRouter = router2;
 
@@ -1143,15 +1403,11 @@ var createCategories = async (name, userId, slug, image, description) => {
 var getAllCategory = async () => {
   try {
     const categories = await prisma.category.findMany({
-      where: {
-        isActive: true
-      },
+      where: { isActive: true },
       include: {
-        medicines: true
+        _count: { select: { medicines: true } }
       },
-      orderBy: {
-        createdAt: "desc"
-      }
+      orderBy: { createdAt: "desc" }
     });
     return categories;
   } catch (error) {
@@ -1159,7 +1415,8 @@ var getAllCategory = async () => {
     throw new Error("Failed to fetch categories");
   }
 };
-var updateCategory = async (categoryId, name, slug) => {
+var updateCategory = async (categoryId, updateData) => {
+  const { name, slug, image, description } = updateData;
   try {
     const existingCategory = await prisma.category.findUnique({
       where: { id: categoryId }
@@ -1167,15 +1424,20 @@ var updateCategory = async (categoryId, name, slug) => {
     if (!existingCategory) {
       throw new Error("Category not found");
     }
-    const safeSlug = slug && typeof slug === "string" ? slugify2(slug) : void 0;
+    let safeSlug = void 0;
+    if (slug) {
+      safeSlug = slugify2(slug);
+    } else if (name) {
+      safeSlug = slugify2(name);
+    }
     if (name || safeSlug) {
       const duplicate = await prisma.category.findFirst({
         where: {
           id: { not: categoryId },
           OR: [
-            name ? { name } : void 0,
-            safeSlug ? { slug: safeSlug } : void 0
-          ].filter(Boolean)
+            ...name ? [{ name }] : [],
+            ...safeSlug ? [{ slug: safeSlug }] : []
+          ]
         }
       });
       if (duplicate) {
@@ -1186,52 +1448,56 @@ var updateCategory = async (categoryId, name, slug) => {
       where: { id: categoryId },
       data: {
         ...name && { name },
-        ...safeSlug && { slug: safeSlug }
+        ...safeSlug && { slug: safeSlug },
+        ...image !== void 0 && { image },
+        ...description !== void 0 && { description }
       }
     });
   } catch (error) {
-    console.error("Error updating category:", error);
+    console.error("Error updating category in service:", error);
     throw error;
   }
 };
-var deleteCategory = async (categoryId, userId) => {
+var deleteCategory = async (categoryId) => {
   try {
-    const existingCategory = await prisma.category.findFirst({
-      where: { id: categoryId, userId },
-      include: {
-        _count: { select: { medicines: true } }
-      }
-    });
-    if (!existingCategory) {
-      throw new Error("Category not found or unauthorized");
-    }
-    if (existingCategory._count.medicines > 0) {
-      throw new Error("Cannot delete category with medicines");
-    }
-    return await prisma.category.update({
+    const existingCategory = await prisma.category.findUnique({
       where: { id: categoryId },
-      data: {
-        isActive: false
-      }
-    });
-  } catch (error) {
-    console.error("Error deleting category:", error);
-    throw error;
-  }
-};
-var getSingleCategory = async (id) => {
-  try {
-    const result = await prisma.category.findUnique({
-      where: {
-        id
-      },
       include: {
         _count: {
           select: { medicines: true }
         }
       }
     });
-    console.log(result);
+    if (!existingCategory) {
+      throw new Error("Category not found");
+    }
+    if (existingCategory._count.medicines > 0) {
+      throw new Error(
+        "Cannot delete category: It contains linked medicines. Remove medicines first."
+      );
+    }
+    const result = await prisma.category.update({
+      where: { id: categoryId },
+      data: {
+        isActive: false
+      }
+    });
+    return result;
+  } catch (error) {
+    console.error("Error in deleteCategory service:", error);
+    throw error;
+  }
+};
+var getSingleCategory = async (id) => {
+  try {
+    const result = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { medicines: true }
+        }
+      }
+    });
     if (!result) {
       throw new Error("Category not found");
     }
@@ -1247,7 +1513,6 @@ var CategoriesService = {
   updateCategory,
   deleteCategory,
   getSingleCategory
-  // এটি যোগ করা হলো
 };
 
 // src/module/categories/categories.controller.ts
@@ -1273,12 +1538,6 @@ var createCategories2 = async (req, res) => {
         message: "Category name is required"
       });
     }
-    if (name.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name must be under 100 characters"
-      });
-    }
     const data = await CategoriesService.createCategories(
       name.trim(),
       user.id,
@@ -1293,15 +1552,9 @@ var createCategories2 = async (req, res) => {
     });
   } catch (error) {
     console.error("Create category error:", error);
-    if (error.message.includes("already exists")) {
-      return res.status(409).json({
-        success: false,
-        message: error.message
-      });
-    }
-    return res.status(500).json({
+    return res.status(error.message.includes("already exists") ? 409 : 500).json({
       success: false,
-      message: "Failed to create category"
+      message: error.message || "Failed to create category"
     });
   }
 };
@@ -1314,52 +1567,25 @@ var getAllCategory2 = async (req, res) => {
       data
     });
   } catch (error) {
-    console.error("Error in getAllCategory:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch categories"
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch categories" });
   }
 };
 var updateCategory2 = async (req, res) => {
   try {
     const user = req.user;
-    const { name, slug } = req.body;
+    const { name, slug, image, description } = req.body;
     const categoryId = req.params.id;
-    if (!user || user.role !== ROLE.ADMIN || !ROLE.SELLER) {
-      return res.status(403).json({
-        success: false,
-        message: "Admin or SELLER access required"
-      });
-    }
-    if (!categoryId) {
-      return res.status(400).json({
-        success: false,
-        message: "Category ID is required"
-      });
-    }
-    if (!name && !slug) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one field (name or slug) is required"
-      });
-    }
-    if (name && name.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name cannot be empty"
-      });
-    }
-    if (name && name.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name must be under 100 characters"
-      });
+    if (!user || user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER) {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
     const updatedCategory = await CategoriesService.updateCategory(
       categoryId,
-      name?.trim(),
-      slug
+      {
+        name: name?.trim(),
+        slug,
+        image,
+        description
+      }
     );
     return res.status(200).json({
       success: true,
@@ -1367,22 +1593,11 @@ var updateCategory2 = async (req, res) => {
       data: updatedCategory
     });
   } catch (error) {
-    console.error("Error in updateCategory controller:", error);
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
-    }
-    if (error.message.includes("already exists")) {
-      return res.status(409).json({
-        success: false,
-        message: error.message
-      });
-    }
-    return res.status(500).json({
+    console.error("Update controller error:", error);
+    const status2 = error.message.includes("not found") ? 404 : error.message.includes("exists") ? 409 : 500;
+    return res.status(status2).json({
       success: false,
-      message: "Failed to update category"
+      message: error.message || "Failed to update category"
     });
   }
 };
@@ -1393,7 +1608,7 @@ var deleteCategory2 = async (req, res) => {
     if (!user || user.role !== ROLE.ADMIN && user.role !== ROLE.SELLER) {
       return res.status(403).json({
         success: false,
-        message: "Admin or Seller access required"
+        message: "Unauthorized: Admin or Seller access required"
       });
     }
     if (!id) {
@@ -1402,7 +1617,7 @@ var deleteCategory2 = async (req, res) => {
         message: "Category ID is required"
       });
     }
-    const data = await CategoriesService.deleteCategory(id, user.id);
+    const data = await CategoriesService.deleteCategory(id);
     return res.status(200).json({
       success: true,
       message: "Category deleted successfully",
@@ -1410,52 +1625,30 @@ var deleteCategory2 = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in deleteCategory controller:", error);
-    if (error.message.includes("not found") || error.message.includes("unauthorized")) {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
-    }
-    if (error.message.includes("Cannot delete")) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
-    }
-    return res.status(500).json({
+    let statusCode = 500;
+    if (error.message.includes("not found")) statusCode = 404;
+    if (error.message.includes("linked medicines")) statusCode = 400;
+    return res.status(statusCode).json({
       success: false,
-      message: "Failed to delete category"
+      message: error.message || "An error occurred while deleting the category"
     });
   }
 };
 var getSingleCategory2 = async (req, res) => {
   try {
     const categoryId = req.params.id;
-    if (!categoryId) {
-      return res.status(400).json({
-        success: false,
-        message: "Category ID is required"
-      });
-    }
     const category = await CategoriesService.getSingleCategory(
       categoryId
     );
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found"
-      });
-    }
     return res.status(200).json({
       success: true,
       message: "Category retrieved successfully",
-      data: category.id
+      data: { category }
     });
   } catch (error) {
-    console.error("Error in getSingleCategory controller:", error);
-    return res.status(500).json({
+    return res.status(error.message.includes("not found") ? 404 : 500).json({
       success: false,
-      message: "Failed to fetch category details"
+      message: error.message || "Failed to fetch category details"
     });
   }
 };
@@ -1485,11 +1678,7 @@ router3.delete(
   auth_guard_default(ROLE.ADMIN, ROLE.SELLER),
   CategoriesController.deleteCategory
 );
-router3.patch(
-  "/:id",
-  auth_guard_default(ROLE.ADMIN, ROLE.SELLER),
-  CategoriesController.getSingleCategory
-);
+router3.get("/:id", CategoriesController.getSingleCategory);
 var categoriesRouter = router3;
 
 // src/module/SellerProfile/sellerProfile.route.ts
@@ -1840,6 +2029,9 @@ var sellerRouter = router4;
 // src/module/order/orders.route.ts
 import { Router as Router5 } from "express";
 
+// src/module/order/orders.controller.ts
+import status from "http-status";
+
 // src/types/VALID_TRANSITIONS.ts
 var VALID_TRANSITIONS = {
   [ORDER_STATUS.PLACED]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
@@ -2001,9 +2193,9 @@ var getUserOrders = async (userId) => {
     orderBy: { createdAt: "desc" }
   });
 };
-var getSellerOrders = async (sellerId) => {
+var getSellerOrders = async (sellerProfileId) => {
   const orderItems = await prisma.orderItem.findMany({
-    where: { medicine: { sellerId } },
+    where: { medicine: { sellerId: sellerProfileId } },
     include: {
       order: {
         include: {
@@ -2025,7 +2217,7 @@ var getSellerOrders = async (sellerId) => {
     orderBy: { createdAt: "desc" }
   });
   const grouped = {};
-  orderItems.forEach((item) => {
+  for (const item of orderItems) {
     const orderId = item.orderId;
     if (!grouped[orderId]) {
       grouped[orderId] = {
@@ -2034,12 +2226,18 @@ var getSellerOrders = async (sellerId) => {
       };
     }
     grouped[orderId].orderItems.push(item);
+  }
+  const result = Object.values(grouped);
+  result.sort((a, b) => {
+    const da = new Date(a.createdAt).getTime();
+    const db = new Date(b.createdAt).getTime();
+    return db - da;
   });
-  return Object.values(grouped);
+  return result;
 };
 var updateOrderStatus = async ({
   orderId,
-  status,
+  status: status2,
   userRole,
   userId
 }) => {
@@ -2058,16 +2256,16 @@ var updateOrderStatus = async ({
       throw new Error("Order not found");
     }
     const allowedTransitions = VALID_TRANSITIONS_default[order.status];
-    if (!allowedTransitions.includes(status)) {
+    if (!allowedTransitions.includes(status2)) {
       throw new Error(
-        `Cannot change order status from ${order.status} to ${status}`
+        `Cannot change order status from ${order.status} to ${status2}`
       );
     }
     if (userRole === ROLE.CUSTOMER) {
       if (order.userId !== userId) {
         throw new Error("Unauthorized to update this order");
       }
-      if (status !== ORDER_STATUS.CANCELLED) {
+      if (status2 !== ORDER_STATUS.CANCELLED) {
         throw new Error("Customers can only cancel orders");
       }
       if (order.status !== ORDER_STATUS.PLACED) {
@@ -2079,12 +2277,13 @@ var updateOrderStatus = async ({
         where: {
           orderId,
           medicine: { sellerId: userId }
-        }
+        },
+        select: { id: true }
       });
       if (!sellerItem) {
         throw new Error("Unauthorized to update this order");
       }
-      if (status === ORDER_STATUS.CANCELLED) {
+      if (status2 === ORDER_STATUS.CANCELLED) {
         throw new Error("Sellers cannot cancel orders");
       }
       const allowedSellerStatuses = [
@@ -2093,11 +2292,11 @@ var updateOrderStatus = async ({
         ORDER_STATUS.SHIPPED,
         ORDER_STATUS.DELIVERED
       ];
-      if (!allowedSellerStatuses.includes(status)) {
-        throw new Error(`Invalid status update for seller: ${status}`);
+      if (!allowedSellerStatuses.includes(status2)) {
+        throw new Error(`Invalid status update for seller: ${status2}`);
       }
     }
-    if (status === ORDER_STATUS.CANCELLED) {
+    if (status2 === ORDER_STATUS.CANCELLED) {
       await Promise.all(
         order.orderItems.map(
           (item) => tx.medicine.update({
@@ -2107,14 +2306,14 @@ var updateOrderStatus = async ({
         )
       );
     }
-    const deliveredAt = status === ORDER_STATUS.DELIVERED ? /* @__PURE__ */ new Date() : order.deliveredAt;
+    const deliveredAt = status2 === ORDER_STATUS.DELIVERED ? /* @__PURE__ */ new Date() : order.deliveredAt;
     const updatedOrder = await tx.order.update({
       where: { id: orderId },
       data: {
-        status,
+        status: status2,
         deliveredAt,
         // Set cancelReason if needed (you can add this to payload)
-        ...status === ORDER_STATUS.CANCELLED && {
+        ...status2 === ORDER_STATUS.CANCELLED && {
           cancelReason: "Cancelled by user"
         }
       },
@@ -2207,21 +2406,42 @@ var getOrderDetails2 = async (req, res) => {
     const user = req.user;
     const { orderId } = req.params;
     if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(status.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+    let actorId = user.id;
+    if (user.role === ROLE.SELLER) {
+      const sellerProfile = await prisma.sellerProfile.findUnique({
+        where: { userId: user.id },
+        select: { id: true }
+      });
+      if (!sellerProfile) {
+        return res.status(status.NOT_FOUND).json({
+          success: false,
+          message: "Seller profile not found"
+        });
+      }
+      actorId = sellerProfile.id;
     }
     const order = await orderService.getOrderDetails(
       orderId,
-      user.id,
+      actorId,
       user.role
     );
-    res.status(200).json({
+    return res.status(status.OK).json({
       success: true,
       data: order
     });
   } catch (error) {
-    res.status(400).json({
+    const msg = error?.message || "Failed to fetch order";
+    let code = status.BAD_REQUEST;
+    if (msg.includes("Unauthorized")) code = status.FORBIDDEN;
+    else if (msg.includes("not found")) code = status.NOT_FOUND;
+    return res.status(code).json({
       success: false,
-      message: error.message
+      message: msg
     });
   }
 };
@@ -2246,43 +2466,65 @@ var getUserOrders2 = async (req, res) => {
 var getSellerOrders2 = async (req, res) => {
   try {
     const user = req.user;
-    if (!user || user.role !== "SELLER") {
-      return res.status(401).json({ message: "Unauthorized" });
+    if (!user || user.role !== ROLE.SELLER) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-    const orders = await orderService.getSellerOrders(user.id);
-    res.status(200).json({
-      success: true,
-      data: orders
+    const sellerProfile = await prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
     });
+    if (!sellerProfile) {
+      return res.status(404).json({ success: false, message: "Seller profile not found" });
+    }
+    const orders = await orderService.getSellerOrders(sellerProfile.id);
+    return res.status(200).json({ success: true, data: orders });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 var updateOrderStatus2 = async (req, res) => {
   try {
     const user = req.user;
-    const { orderId } = req.params;
-    const { status } = req.body;
-    if (user?.role === ROLE.CUSTOMER) {
-      return res.status(403).json({ message: "Customers cannot update order status" });
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    const rawOrderId = req.params?.orderId;
+    const orderId = Array.isArray(rawOrderId) ? rawOrderId[0] : rawOrderId;
+    const { status: status2 } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "Order ID is required" });
+    }
+    if (!status2) {
+      return res.status(400).json({ success: false, message: "Status is required" });
+    }
+    let actorId = user.id;
+    if (user.role === ROLE.SELLER) {
+      const sellerProfile = await prisma.sellerProfile.findUnique({
+        where: { userId: user.id },
+        select: { id: true }
+      });
+      if (!sellerProfile) {
+        return res.status(404).json({
+          success: false,
+          message: "Seller profile not found"
+        });
+      }
+      actorId = sellerProfile.id;
+    }
     const updatedOrder = await orderService.updateOrderStatus({
       orderId,
-      status,
+      status: status2,
       userRole: user.role,
-      userId: user.id
+      userId: actorId
+      //  for seller it's sellerProfile.id
     });
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
       data: updatedOrder
     });
   } catch (error) {
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
       message: error.message
     });
@@ -2349,6 +2591,11 @@ var OrderRouter = router5;
 import { Router as Router6 } from "express";
 
 // src/module/Address/address.service.ts
+var cleanOpt = (v) => {
+  if (typeof v !== "string") return void 0;
+  const s = v.trim();
+  return s.length ? s : void 0;
+};
 var createAddress = async (input) => {
   const {
     userId,
@@ -2369,80 +2616,53 @@ var createAddress = async (input) => {
       data: { isDefault: false }
     });
   }
-  const address = await prisma.address.create({
-    data: {
-      userId,
-      fullName,
-      phone,
-      country,
-      city,
-      state,
-      area,
-      postalCode,
-      addressLine,
-      label,
-      isDefault
-    }
-  });
+  const data = {
+    userId,
+    fullName,
+    country,
+    isDefault,
+    phone: cleanOpt(phone),
+    city: cleanOpt(city),
+    state: cleanOpt(state),
+    //  state=String হলে এখানে undefined হয়ে যাবে
+    area: cleanOpt(area),
+    postalCode: cleanOpt(postalCode),
+    addressLine: cleanOpt(addressLine),
+    label: cleanOpt(label)
+  };
+  for (const k of Object.keys(data)) {
+    if (data[k] === void 0) delete data[k];
+  }
+  const address = await prisma.address.create({ data });
   return address;
 };
 var updateAddress = async (input) => {
-  const {
-    id,
-    userId,
-    fullName,
-    phone,
-    country,
-    city,
-    state,
-    area,
-    postalCode,
-    addressLine,
-    label,
-    isDefault
-  } = input;
-  const existingAddress = await prisma.address.findUnique({
-    where: { id }
-  });
-  if (!existingAddress) {
-    throw new Error("Address not found");
-  }
-  if (existingAddress.userId !== userId) {
+  const { id, userId, isDefault, ...rest } = input;
+  const existingAddress = await prisma.address.findUnique({ where: { id } });
+  if (!existingAddress) throw new Error("Address not found");
+  if (existingAddress.userId !== userId)
     throw new Error("Unauthorized to update this address");
-  }
   if (isDefault) {
     await prisma.address.updateMany({
       where: { userId, isDefault: true, id: { not: id } },
       data: { isDefault: false }
     });
   }
-  const updatedAddress = await prisma.address.update({
-    where: { id },
-    data: {
-      fullName,
-      phone,
-      country,
-      city,
-      state,
-      area,
-      postalCode,
-      addressLine,
-      label,
-      isDefault
-    }
-  });
-  return updatedAddress;
+  const data = {};
+  for (const [k, v] of Object.entries(rest)) {
+    const cleaned = cleanOpt(v);
+    if (cleaned !== void 0) data[k] = cleaned;
+  }
+  if (isDefault !== void 0) data.isDefault = isDefault;
+  return prisma.address.update({ where: { id }, data });
 };
 var deleteAddress = async (addressId, userId) => {
   const address = await prisma.address.findUnique({
     where: { id: addressId }
   });
-  if (!address) {
-    throw new Error("Address not found");
-  }
-  if (address.userId !== userId) {
+  if (!address) throw new Error("Address not found");
+  if (address.userId !== userId)
     throw new Error("Unauthorized to delete this address");
-  }
   const deleted = await prisma.address.delete({
     where: { id: addressId }
   });
@@ -2470,12 +2690,9 @@ var getMyAddressById = async (userId, addressId) => {
   const address = await prisma.address.findUnique({
     where: { id: addressId }
   });
-  if (!address) {
-    throw new Error("Address not found");
-  }
-  if (address.userId !== userId) {
+  if (!address) throw new Error("Address not found");
+  if (address.userId !== userId)
     throw new Error("Address not found or access denied");
-  }
   return address;
 };
 var addressService = {
@@ -2488,8 +2705,18 @@ var addressService = {
 };
 
 // src/module/Address/address.controller.ts
+var cleanOptionalString = (v) => {
+  if (typeof v !== "string") return void 0;
+  const s = v.trim();
+  return s.length ? s : void 0;
+};
+var cleanRequiredString = (v) => {
+  if (typeof v !== "string") return "";
+  return v.trim();
+};
 var createAddress2 = async (req, res) => {
   try {
+    console.log("REQ state:", req.body.state, typeof req.body.state);
     const user = req.user;
     if (!user) {
       return res.status(401).json({
@@ -2497,11 +2724,14 @@ var createAddress2 = async (req, res) => {
         message: "Unauthorized"
       });
     }
-    const { fullName, phone, city, area, postalCode, addressLine } = req.body;
-    if (!fullName || !phone || !city || !area || !postalCode || !addressLine) {
+    const fullName = cleanRequiredString(req.body.fullName);
+    const phone = cleanRequiredString(req.body.phone);
+    const city = cleanRequiredString(req.body.city);
+    const addressLine = cleanRequiredString(req.body.addressLine);
+    if (!fullName || !phone || !city || !addressLine) {
       return res.status(400).json({
         success: false,
-        message: "Required fields: fullName, phone, city, area, postalCode, addressLine"
+        message: "Required fields: fullName, phone, city, addressLine"
       });
     }
     const phoneRegex = /^[\d\s\-\+\(\)]+$/;
@@ -2513,16 +2743,17 @@ var createAddress2 = async (req, res) => {
     }
     const address = await addressService.createAddress({
       userId: user.id,
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      country: req.body.country || "Bangladesh",
-      city: city.trim(),
-      state: req.body.state,
-      area: area.trim(),
-      postalCode: postalCode.trim(),
-      addressLine: addressLine.trim(),
-      label: req.body.label,
-      isDefault: req.body.isDefault || false
+      fullName,
+      phone,
+      country: cleanOptionalString(req.body.country) ?? "Bangladesh",
+      city,
+      //  optional fields (safe)
+      state: cleanOptionalString(req.body.state),
+      area: cleanOptionalString(req.body.area),
+      postalCode: cleanOptionalString(req.body.postalCode),
+      label: cleanOptionalString(req.body.label),
+      addressLine,
+      isDefault: Boolean(req.body.isDefault)
     });
     return res.status(201).json({
       success: true,
@@ -2556,16 +2787,16 @@ var updateAddress2 = async (req, res) => {
     const updatedAddress = await addressService.updateAddress({
       id: addressId,
       userId: user.id,
-      fullName: req.body.fullName,
-      phone: req.body.phone,
-      country: req.body.country,
-      city: req.body.city,
-      state: req.body.state,
-      area: req.body.area,
-      postalCode: req.body.postalCode,
-      addressLine: req.body.addressLine,
-      label: req.body.label,
-      isDefault: req.body.isDefault
+      fullName: cleanOptionalString(req.body.fullName),
+      phone: cleanOptionalString(req.body.phone),
+      country: cleanOptionalString(req.body.country),
+      city: cleanOptionalString(req.body.city),
+      state: cleanOptionalString(req.body.state),
+      area: cleanOptionalString(req.body.area),
+      postalCode: cleanOptionalString(req.body.postalCode),
+      addressLine: cleanOptionalString(req.body.addressLine),
+      label: cleanOptionalString(req.body.label),
+      isDefault: typeof req.body.isDefault === "boolean" ? req.body.isDefault : void 0
     });
     return res.status(200).json({
       success: true,
@@ -3114,7 +3345,7 @@ var createReview = async ({
   if (!orderItem) {
     throw new Error("You can only review medicines you have purchased");
   }
-  if (orderItem.order.status !== "DELIVERED") {
+  if (orderItem.order.status !== ORDER_STATUS.DELIVERED) {
     throw new Error("You can only review after the order is delivered");
   }
   const existingReview = await prisma.review.findFirst({
@@ -3123,52 +3354,49 @@ var createReview = async ({
   if (existingReview) {
     throw new Error("You have already reviewed this medicine for this order");
   }
-  const review = await prisma.review.create({
-    data: {
-      userId,
-      medicineId,
-      orderId,
-      rating,
-      comment: comment.trim(),
-      isVerified: true
-      // Verified because linked to order
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true
-        }
+  const review = await prisma.$transaction(async (tx) => {
+    const created = await tx.review.create({
+      data: {
+        userId,
+        medicineId,
+        orderId,
+        rating,
+        comment: comment?.trim() || null,
+        isVerified: true
       },
-      medicine: {
-        select: {
-          id: true,
-          name: true
-        }
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        medicine: { select: { id: true, name: true } }
       }
-    }
+    });
+    const result = await tx.review.aggregate({
+      where: { medicineId },
+      _avg: { rating: true },
+      _count: { rating: true }
+    });
+    const avg = result._avg.rating;
+    const count = result._count.rating;
+    await tx.medicine.update({
+      where: { id: medicineId },
+      data: { rating: count === 0 ? null : Math.round((avg ?? 0) * 10) / 10 }
+    });
+    return created;
   });
-  await updateMedicineRating(medicineId);
   return review;
 };
 var updateMedicineRating = async (medicineId) => {
-  const reviews = await prisma.review.findMany({
+  const result = await prisma.review.aggregate({
     where: { medicineId },
-    select: { rating: true }
+    _avg: { rating: true },
+    _count: { rating: true }
   });
-  if (reviews.length === 0) {
-    await prisma.medicine.update({
-      where: { id: medicineId },
-      data: { rating: null }
-    });
-    return;
-  }
-  const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+  const avg = result._avg.rating;
+  const count = result._count.rating;
   await prisma.medicine.update({
     where: { id: medicineId },
-    data: { rating: Math.round(avgRating * 10) / 10 }
-    // Round to 1 decimal
+    data: {
+      rating: count === 0 ? null : Math.round((avg ?? 0) * 10) / 10
+    }
   });
 };
 var getMedicineReviews = async (medicineId) => {
@@ -3259,12 +3487,22 @@ var updateReview = async (reviewId, userId, rating, comment) => {
   await updateMedicineRating(review.medicineId);
   return updatedReview;
 };
+var getMyReview = async (userId, orderId, medicineId) => {
+  return prisma.review.findFirst({
+    where: {
+      userId,
+      orderId,
+      medicineId
+    }
+  });
+};
 var reviewService = {
   createReview,
   getMedicineReviews,
   getSellerReviews,
   deleteReview,
-  updateReview
+  updateReview,
+  getMyReview
 };
 
 // src/module/reviews/review.controller.ts
@@ -3272,12 +3510,6 @@ var createReview2 = async (req, res) => {
   try {
     const user = req.user;
     const { medicineId, orderId, rating, comment } = req.body;
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    if (user.role !== ROLE.CUSTOMER) {
-      return res.status(403).json({ message: "Only customers can create reviews" });
-    }
     const review = await reviewService.createReview({
       userId: user.id,
       medicineId,
@@ -3285,16 +3517,13 @@ var createReview2 = async (req, res) => {
       rating,
       comment
     });
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Review submitted successfully",
       data: review
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 var getMedicineReviews2 = async (req, res) => {
@@ -3303,65 +3532,87 @@ var getMedicineReviews2 = async (req, res) => {
     const reviews = await reviewService.getMedicineReviews(
       medicineId
     );
-    res.status(200).json({
-      success: true,
-      data: reviews
-    });
+    return res.status(200).json({ success: true, data: reviews });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 var getSellerReviews2 = async (req, res) => {
   try {
     const user = req.user;
-    if (!user || user.role !== ROLE.SELLER) {
-      return res.status(403).json({ message: "Only sellers can view their reviews" });
-    }
     const reviews = await reviewService.getSellerReviews(user.id);
-    res.status(200).json({
-      success: true,
-      data: reviews
-    });
+    return res.status(200).json({ success: true, data: reviews });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 var deleteReview2 = async (req, res) => {
   try {
-    const user = req.user;
     const { reviewId } = req.params;
-    if (!user || user.role !== ROLE.ADMIN) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
     await reviewService.deleteReview(reviewId);
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Review deleted successfully"
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+var updateReview2 = async (req, res) => {
+  try {
+    const user = req.user;
+    const { reviewId } = req.params;
+    const { rating, comment } = req.body;
+    const updated = await reviewService.updateReview(
+      reviewId,
+      user.id,
+      rating,
+      comment
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Review updated successfully",
+      data: updated
     });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+var getMyReview2 = async (req, res) => {
+  try {
+    const user = req.user;
+    const { orderId, medicineId } = req.query;
+    const review = await reviewService.getMyReview(
+      user.id,
+      String(orderId),
+      String(medicineId)
+    );
+    res.status(200).json({
+      success: true,
+      data: review
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 var reviewController = {
   createReview: createReview2,
   getMedicineReviews: getMedicineReviews2,
   getSellerReviews: getSellerReviews2,
-  deleteReview: deleteReview2
+  deleteReview: deleteReview2,
+  updateReview: updateReview2,
+  getMyReview: getMyReview2
 };
 
 // src/module/reviews/reviews.route.ts
 var router8 = Router8();
 router8.get("/medicine/:medicineId", reviewController.getMedicineReviews);
 router8.post("/", auth_guard_default(ROLE.CUSTOMER), reviewController.createReview);
+router8.patch(
+  "/:reviewId",
+  auth_guard_default(ROLE.CUSTOMER),
+  reviewController.updateReview
+);
 router8.get(
   "/seller/all",
   auth_guard_default(ROLE.SELLER),
@@ -3372,7 +3623,42 @@ router8.delete(
   auth_guard_default(ROLE.ADMIN),
   reviewController.deleteReview
 );
+router8.get("/my", auth_guard_default(ROLE.CUSTOMER), reviewController.getMyReview);
 var ReviewRouter = router8;
+
+// src/module/manufacturer/manufacturer.route.ts
+import { Router as Router9 } from "express";
+
+// src/module/manufacturer/manufacturer.controller.ts
+var getAllManufacturers = async (_req, res) => {
+  try {
+    const rows = await prisma.medicine.findMany({
+      where: { isActive: true },
+      select: { manufacturer: true },
+      distinct: ["manufacturer"]
+    });
+    const data = rows.map((r) => r.manufacturer).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    return res.status(200).json({
+      success: true,
+      message: "Manufacturers fetched successfully",
+      data
+    });
+  } catch (error) {
+    console.error("Get manufacturers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch manufacturers"
+    });
+  }
+};
+var manufacturerController = {
+  getAllManufacturers
+};
+
+// src/module/manufacturer/manufacturer.route.ts
+var router9 = Router9();
+router9.get("/", manufacturerController.getAllManufacturers);
+var manufacturerRouter = router9;
 
 // src/app.ts
 var app = express();
@@ -3399,6 +3685,8 @@ app.get("/", async (req, res) => {
 });
 app.use("/api/categories", categoriesRouter);
 app.use("/api/medicines", medicineRouter);
+app.use("/api/products", medicineRouter);
+app.use("/api/manufacturers", manufacturerRouter);
 app.use("/api", userRouter);
 app.use("/api/cart", cartItemRouter);
 app.use("/api/orders", OrderRouter);
@@ -3420,12 +3708,12 @@ app.use((req, res, next) => {
   });
 });
 app.use((err, req, res, next) => {
-  const status = err.statusCode || 500;
+  const status2 = err.statusCode || 500;
   const timestamp = (/* @__PURE__ */ new Date()).toLocaleString("en-BD", {
     timeZone: "Asia/Dhaka",
     hour12: false
   });
-  return res.status(status).json({
+  return res.status(status2).json({
     success: false,
     message: err.message || "Internal Server Error",
     timestamp,

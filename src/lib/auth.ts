@@ -1,40 +1,39 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { prisma } from "./prisma";
 import nodemailer from "nodemailer";
 
-// =============================
-// Validate required env variables
-// =============================
-const requiredEmailEnvVars = ["APP_EMAIL", "APP_PASS"] as const;
+import { prisma } from "./prisma";
+import { env } from "../config/env";
 
-for (const envVar of requiredEmailEnvVars) {
-  if (!process.env[envVar]) {
-    console.warn(
-      `Warning: ${envVar} is not set. Email features will be disabled.`,
-    );
-  }
-}
+/**
+ * Helpers
+ */
+const isProd = env.NODE_ENV === "production";
 
-// =============================
-// Email transporter configuration
-// =============================
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.APP_EMAIL,
-    pass: process.env.APP_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 5000,
-});
+const trustedOrigins = [env.FRONT_END_URL, "http://localhost:3000"].filter(
+  Boolean,
+);
 
-// =============================
-// Verify email transporter on startup
-// =============================
-if (process.env.APP_EMAIL && process.env.APP_PASS) {
+/**
+ * Email transporter (only if creds exist)
+ */
+const hasEmailCreds = Boolean(env.APP_EMAIL && env.APP_PASS);
+
+const transporter = hasEmailCreds
+  ? nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: env.APP_EMAIL,
+        pass: env.APP_PASS,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+    })
+  : null;
+
+if (!isProd && transporter) {
   transporter.verify((error) => {
     if (error) {
       console.error("Email transporter verification failed:", error);
@@ -44,33 +43,42 @@ if (process.env.APP_EMAIL && process.env.APP_PASS) {
   });
 }
 
-// =============================
-// Helper: Queue failed emails for retry
-// =============================
+/**
+ * Queue failed emails (placeholder)
+ */
 const queueFailedEmail = async (
   userId: string,
   email: string,
   type: string,
   url: string,
-  error: any,
+  error: unknown,
 ) => {
   console.error("Email queued for retry:", {
     userId,
     email,
     type,
     timestamp: new Date().toISOString(),
-    error: error?.message || error,
+    error: error instanceof Error ? error.message : error,
   });
 };
 
-// =============================
-// Helper: Send email with retry logic
-// =============================
+type MailOptions = {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+};
+
+/**
+ * Send email with retry logic
+ */
 const sendEmailWithRetry = async (
-  mailOptions: any,
+  mailOptions: MailOptions,
   maxRetries = 3,
 ): Promise<boolean> => {
-  let lastError: any;
+  if (!transporter) return false;
+
+  let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -80,11 +88,11 @@ const sendEmailWithRetry = async (
         info.messageId,
       );
       return true;
-    } catch (error: any) {
+    } catch (error) {
       lastError = error;
       console.error(
         `Email send failed (attempt ${attempt}/${maxRetries}):`,
-        error?.message || error,
+        error instanceof Error ? error.message : error,
       );
 
       if (attempt < maxRetries) {
@@ -98,17 +106,19 @@ const sendEmailWithRetry = async (
   return false;
 };
 
-// =============================
-// Better-auth configuration
-// =============================
+/**
+ * Better Auth config
+ */
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
 
-  baseURL: process.env.BETTER_AUTH_URL as string,
+  //
+  baseURL: env.BETTER_AUTH_URL,
 
-  trustedOrigins: [process.env.FRONTEND_URL as string],
+  //  origin mismatch fix (FRONTEND_URL -> FRONT_END_URL)
+  trustedOrigins,
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
@@ -121,18 +131,19 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: "better-auth",
-    useSecureCookies: false,
+    useSecureCookies: isProd,
+
     defaultCookieAttributes: {
-      sameSite: "lax",
-      secure: false,
-      httpOnly: false,
+      sameSite: isProd ? "none" : "lax",
+      secure: isProd,
+      httpOnly: true,
     },
   },
 
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
       accessType: "offline",
       prompt: "select_account consent",
     },
@@ -146,15 +157,15 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
-      if (!process.env.APP_EMAIL || !process.env.APP_PASS) {
+      if (!hasEmailCreds || !transporter) {
         console.warn(
           "Email credentials not configured. Skipping verification email.",
         );
         return;
       }
 
-      const mailOptions = {
-        from: `"MediStore" <${process.env.APP_EMAIL}>`,
+      const mailOptions: MailOptions = {
+        from: `"MediStore" <${env.APP_EMAIL}>`,
         to: user.email,
         subject: "Verify your email address - MediStore",
         html: `
@@ -167,47 +178,35 @@ export const auth = betterAuth({
               Thank you for signing up for MediStore! Please verify your email address by clicking the button below:
             </p>
             <div style="text-align: center; margin: 30px 0;">
-              <a 
-                href="${url}" 
+              <a
+                href="${url}"
                 target="_blank"
                 style="background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;"
               >
                 Verify Email
               </a>
             </div>
-            <p style="color: #777; font-size: 14px;">
-              Or copy and paste this link into your browser:
-            </p>
-            <p style="color: #4CAF50; word-break: break-all; font-size: 14px;">
-              ${url}
-            </p>
+            <p style="color: #777; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #4CAF50; word-break: break-all; font-size: 14px;">${url}</p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
             <p style="color: #999; font-size: 12px;">
               If you didn't request this verification, you can safely ignore this email.
-            </p>
-            <p style="color: #999; font-size: 12px;">
-              This verification link will expire in 24 hours.
             </p>
           </div>
         `,
       };
 
-      try {
-        const success = await sendEmailWithRetry(mailOptions);
+      const success = await sendEmailWithRetry(mailOptions);
 
-        if (!success) {
-          await queueFailedEmail(
-            user.id,
-            user.email,
-            "VERIFICATION",
-            url,
-            new Error("All retry attempts failed"),
-          );
-          console.warn("User signed up but verification email failed.");
-        }
-      } catch (error: any) {
-        console.error("Unexpected error in sendVerificationEmail:", error);
-        await queueFailedEmail(user.id, user.email, "VERIFICATION", url, error);
+      if (!success) {
+        await queueFailedEmail(
+          user.id,
+          user.email,
+          "VERIFICATION",
+          url,
+          new Error("All retry attempts failed"),
+        );
+        console.warn("User signed up but verification email failed.");
       }
     },
   },

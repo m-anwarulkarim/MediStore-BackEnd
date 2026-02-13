@@ -8,9 +8,16 @@ import { env } from "../config/env";
 /**
  * Helpers
  */
-const isProd = env.NODE_ENV === "production";
+const normalizeOrigin = (u?: string) => (u ? u.replace(/\/$/, "") : "");
 
-const trustedOrigins = [env.FRONT_END_URL].filter(Boolean);
+const isHttps = (u?: string) => Boolean(u && u.startsWith("https://"));
+
+const isProd =
+  env.NODE_ENV === "production" ||
+  isHttps(env.BETTER_AUTH_URL) ||
+  isHttps(env.FRONT_END_URL);
+
+const trustedOrigins = [normalizeOrigin(env.FRONT_END_URL)].filter(Boolean);
 
 /**
  * Email transporter (only if creds exist)
@@ -112,10 +119,8 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
 
-  //
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: normalizeOrigin(env.BETTER_AUTH_URL),
 
-  //  origin mismatch fix (FRONTEND_URL -> FRONT_END_URL)
   trustedOrigins,
 
   session: {
@@ -129,12 +134,14 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: "better-auth",
+
     useSecureCookies: isProd,
 
     defaultCookieAttributes: {
       sameSite: isProd ? "none" : "lax",
       secure: isProd,
       httpOnly: true,
+      path: "/",
     },
   },
 

@@ -10,9 +10,7 @@ import { env } from "../config/env";
  */
 const isProd = env.NODE_ENV === "production";
 
-const trustedOrigins = [env.FRONT_END_URL, "http://localhost:3000"].filter(
-  Boolean,
-);
+const trustedOrigins = [env.FRONT_END_URL].filter(Boolean);
 
 /**
  * Email transporter (only if creds exist)

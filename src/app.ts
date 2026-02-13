@@ -4,6 +4,7 @@ import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 import { env } from "./config/env";
 import { auth } from "./lib/auth";
+
 import { userRouter } from "./module/auth/auth.route";
 import { medicineRouter } from "./module/medicine/medicine.route";
 import { categoriesRouter } from "./module/categories/categories.route";
@@ -14,94 +15,118 @@ import { cartItemRouter } from "./module/cartItem/cartItem.route";
 import { ReviewRouter } from "./module/reviews/reviews.route";
 import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
 
+// const app = express();
+
+// // Configure CORS middleware
+// app.use(
+//   cors({
+//     origin: env.FRONT_END_URL,
+//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+//     credentials: true,
+//   }),
+// );
+// app.use((req, _res, next) => {
+//   if (req.path.includes("/api/auth")) {
+//     console.log("AUTH REQ:", {
+//       path: req.path,
+//       method: req.method,
+//       origin: req.headers.origin,
+//       referer: req.headers.referer,
+//       cookie: req.headers.cookie ? "has-cookie" : "no-cookie",
+//     });
+//   }
+//   next();
+// });
+
+// // app.options("*", cors(corsOptions));
+
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+// app.all("/api/auth/*splat", toNodeHandler(auth));
+
 const app = express();
 
-// ------------------- CORS -------------------
-const allowedOrigins = [env.FRONT_END_URL, "http://localhost:3000"].filter(
-  Boolean,
-);
+// ✅ Vercel/Proxy এর জন্য (cookies + secure সঠিকভাবে কাজ করতে)
+app.set("trust proxy", 1);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+// ✅ Allowed origins (trailing slash normalize)
+const allowedOrigins = [
+  env.FRONT_END_URL?.replace(/\/$/, ""),
+  "https://medi-store-front-end.vercel.app",
+].filter(Boolean) as string[];
 
-// ------------------- Body Parser -------------------
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, cb) => {
+    // origin undefined হতে পারে (Postman, server-to-server)
+    if (!origin) return cb(null, true);
+
+    const clean = origin.replace(/\/$/, "");
+    if (allowedOrigins.includes(clean)) return cb(null, true);
+
+    return cb(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // ✅ OPTIONS must
+  allowedHeaders: ["Content-Type", "Authorization"], // ✅ safe default
+};
+
+// ✅ 1) CORS সব রিকোয়েস্টে
+app.use(cors(corsOptions));
+
+// ✅ 2) Preflight আলাদা করে হ্যান্ডেল (বিশেষ করে /api/auth এর জন্য)
+app.options("*", cors(corsOptions));
+app.options("/api/auth/*", cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ------------------- Better Auth -------------------
-app.all("/api/auth/*splat", toNodeHandler(auth));
+// ✅ 3) Better-auth route
+app.all("/api/auth/*", toNodeHandler(auth));
 
-// ------------------- Health Check -------------------
+/* =====================================================
+   HEALTH CHECK
+===================================================== */
 app.get("/", async (req: Request, res: Response) => {
   return res.status(200).json({
     success: true,
     message: "MediStore API is running",
-    timestamp: new Date().toLocaleString("en-BD", {
-      timeZone: "Asia/Dhaka",
-      hour12: false,
-    }),
   });
 });
 
-// ------------------- Public Routes -------------------
+/* =====================================================
+   API ROUTES
+===================================================== */
 app.use("/api/categories", categoriesRouter);
 app.use("/api/medicines", medicineRouter);
 app.use("/api/products", medicineRouter);
 app.use("/api/manufacturers", manufacturerRouter);
-// ------------------- User/Auth Routes -------------------
-app.use("/api", userRouter);
 
-// ------------------- Customer Routes -------------------
+app.use("/api", userRouter);
 app.use("/api/cart", cartItemRouter);
 app.use("/api/orders", OrderRouter);
 app.use("/api/address", addressRouter);
 app.use("/api/reviews", ReviewRouter);
-
-// ------------------- Seller Routes -------------------
 app.use("/api/seller", sellerRouter);
 
-// ------------------- Admin Routes -------------------
-// Admin routes are handled within individual routers with proper guards
-
-// ------------------- 404 Handler -------------------
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const localTime = new Date().toLocaleString("en-BD", {
-    timeZone: "Asia/Dhaka",
-    hour12: false,
-  });
-
-  return res.status(404).json({
+/* =====================================================
+   404 HANDLER
+===================================================== */
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
     success: false,
     message: "Route not found",
     path: req.path,
-    method: req.method,
-    timestamp: localTime,
-    suggestion: "Please check the URL or API documentation",
   });
 });
 
-// ------------------- Global Error Handler -------------------
+/* =====================================================
+   GLOBAL ERROR HANDLER
+===================================================== */
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  const status = err.statusCode || 500;
-  const timestamp = new Date().toLocaleString("en-BD", {
-    timeZone: "Asia/Dhaka",
-    hour12: false,
-  });
-
-  return res.status(status).json({
+  res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || "Internal Server Error",
-    timestamp,
     ...(env.NODE_ENV === "development" && { stack: err.stack }),
   });
 });

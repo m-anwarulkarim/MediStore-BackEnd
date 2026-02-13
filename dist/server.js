@@ -15,19 +15,29 @@ function getEnv(key, required = true) {
 }
 var env = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  //
-  PORT: Number(process.env.PORT) || 5e3,
-  // URL
+  // PORT only for local/dev (not required in Vercel)
+  PORT: process.env.PORT ? Number(process.env.PORT) : void 0,
+  DATABASE_URL: getEnv("DATABASE_URL"),
   URL: getEnv("URL"),
   FRONT_END_URL: getEnv("FRONT_END_URL"),
-  DATABASE_URL: getEnv("DATABASE_URL"),
+  BETTER_AUTH_SECRET: getEnv("BETTER_AUTH_SECRET"),
   BETTER_AUTH_URL: getEnv("BETTER_AUTH_URL"),
-  BETTER_AUTH_SECRET: getEnv("BETTER_AUTH_SECRET")
+  // Email
+  APP_EMAIL: getEnv("APP_EMAIL"),
+  APP_PASS: getEnv("APP_PASS"),
+  // Google
+  GOOGLE_CLIENT_ID: getEnv("GOOGLE_CLIENT_ID"),
+  GOOGLE_CLIENT_SECRET: getEnv("GOOGLE_CLIENT_SECRET"),
+  // Admin (not required in production)
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+  ADMIN_PASS: process.env.ADMIN_PASS,
+  ADMIN_NAME: process.env.ADMIN_NAME
 };
 
 // src/lib/auth.ts
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import nodemailer from "nodemailer";
 
 // src/lib/prisma.ts
 import "dotenv/config";
@@ -171,27 +181,21 @@ process.on("SIGTERM", async () => {
 });
 
 // src/lib/auth.ts
-import nodemailer from "nodemailer";
-var requiredEmailEnvVars = ["APP_EMAIL", "APP_PASS"];
-for (const envVar of requiredEmailEnvVars) {
-  if (!process.env[envVar]) {
-    console.warn(
-      `Warning: ${envVar} is not set. Email features will be disabled.`
-    );
-  }
-}
-var transporter = nodemailer.createTransport({
+var isProd = env.NODE_ENV === "production";
+var trustedOrigins = [env.FRONT_END_URL].filter(Boolean);
+var hasEmailCreds = Boolean(env.APP_EMAIL && env.APP_PASS);
+var transporter = hasEmailCreds ? nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
   secure: false,
   auth: {
-    user: process.env.APP_EMAIL,
-    pass: process.env.APP_PASS
+    user: env.APP_EMAIL,
+    pass: env.APP_PASS
   },
   connectionTimeout: 1e4,
   greetingTimeout: 5e3
-});
-if (process.env.APP_EMAIL && process.env.APP_PASS) {
+}) : null;
+if (!isProd && transporter) {
   transporter.verify((error) => {
     if (error) {
       console.error("Email transporter verification failed:", error);
@@ -206,10 +210,11 @@ var queueFailedEmail = async (userId, email, type, url, error) => {
     email,
     type,
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    error: error?.message || error
+    error: error instanceof Error ? error.message : error
   });
 };
 var sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  if (!transporter) return false;
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -223,7 +228,7 @@ var sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
       lastError = error;
       console.error(
         `Email send failed (attempt ${attempt}/${maxRetries}):`,
-        error?.message || error
+        error instanceof Error ? error.message : error
       );
       if (attempt < maxRetries) {
         const waitTime = Math.pow(2, attempt) * 1e3;
@@ -238,8 +243,10 @@ var auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql"
   }),
-  baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: [process.env.FRONTEND_URL],
+  //
+  baseURL: env.BETTER_AUTH_URL,
+  //  origin mismatch fix (FRONTEND_URL -> FRONT_END_URL)
+  trustedOrigins,
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     // 7 days
@@ -252,17 +259,17 @@ var auth = betterAuth({
   },
   advanced: {
     cookiePrefix: "better-auth",
-    useSecureCookies: false,
+    useSecureCookies: isProd,
     defaultCookieAttributes: {
-      sameSite: "lax",
-      secure: false,
-      httpOnly: false
+      sameSite: isProd ? "none" : "lax",
+      secure: isProd,
+      httpOnly: true
     }
   },
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
       accessType: "offline",
       prompt: "select_account consent"
     }
@@ -274,14 +281,14 @@ var auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
-      if (!process.env.APP_EMAIL || !process.env.APP_PASS) {
+      if (!hasEmailCreds || !transporter) {
         console.warn(
           "Email credentials not configured. Skipping verification email."
         );
         return;
       }
       const mailOptions = {
-        from: `"MediStore" <${process.env.APP_EMAIL}>`,
+        from: `"MediStore" <${env.APP_EMAIL}>`,
         to: user.email,
         subject: "Verify your email address - MediStore",
         html: `
@@ -294,45 +301,33 @@ var auth = betterAuth({
               Thank you for signing up for MediStore! Please verify your email address by clicking the button below:
             </p>
             <div style="text-align: center; margin: 30px 0;">
-              <a 
-                href="${url}" 
+              <a
+                href="${url}"
                 target="_blank"
                 style="background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;"
               >
                 Verify Email
               </a>
             </div>
-            <p style="color: #777; font-size: 14px;">
-              Or copy and paste this link into your browser:
-            </p>
-            <p style="color: #4CAF50; word-break: break-all; font-size: 14px;">
-              ${url}
-            </p>
+            <p style="color: #777; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #4CAF50; word-break: break-all; font-size: 14px;">${url}</p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
             <p style="color: #999; font-size: 12px;">
               If you didn't request this verification, you can safely ignore this email.
             </p>
-            <p style="color: #999; font-size: 12px;">
-              This verification link will expire in 24 hours.
-            </p>
           </div>
         `
       };
-      try {
-        const success = await sendEmailWithRetry(mailOptions);
-        if (!success) {
-          await queueFailedEmail(
-            user.id,
-            user.email,
-            "VERIFICATION",
-            url,
-            new Error("All retry attempts failed")
-          );
-          console.warn("User signed up but verification email failed.");
-        }
-      } catch (error) {
-        console.error("Unexpected error in sendVerificationEmail:", error);
-        await queueFailedEmail(user.id, user.email, "VERIFICATION", url, error);
+      const success = await sendEmailWithRetry(mailOptions);
+      if (!success) {
+        await queueFailedEmail(
+          user.id,
+          user.email,
+          "VERIFICATION",
+          url,
+          new Error("All retry attempts failed")
+        );
+        console.warn("User signed up but verification email failed.");
       }
     }
   }
@@ -663,11 +658,11 @@ var updateMyProfile = async (req, res) => {
   }
 };
 var logoutUser = async (req, res) => {
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd2 = process.env.NODE_ENV === "production";
   res.clearCookie("better-auth.session_token", {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
+    secure: isProd2,
+    sameSite: isProd2 ? "none" : "lax",
     path: "/"
   });
   return res.status(200).json({
@@ -3662,25 +3657,34 @@ var manufacturerRouter = router9;
 
 // src/app.ts
 var app = express();
-app.use(
-  cors({
-    origin: ["http://localhost:3000"],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
-);
+app.set("trust proxy", 1);
+var allowedOrigins = [
+  env.FRONT_END_URL?.replace(/\/$/, ""),
+  "https://medi-store-front-end.vercel.app"
+].filter(Boolean);
+var corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    const clean = origin.replace(/\/$/, "");
+    if (allowedOrigins.includes(clean)) return cb(null, true);
+    return cb(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  // ✅ OPTIONS must
+  allowedHeaders: ["Content-Type", "Authorization"]
+  // ✅ safe default
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+app.options("/api/auth/*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.all("/api/auth/*splat", toNodeHandler(auth));
+app.all("/api/auth/*", toNodeHandler(auth));
 app.get("/", async (req, res) => {
   return res.status(200).json({
     success: true,
-    message: "MediStore API is running",
-    timestamp: (/* @__PURE__ */ new Date()).toLocaleString("en-BD", {
-      timeZone: "Asia/Dhaka",
-      hour12: false
-    })
+    message: "MediStore API is running"
   });
 });
 app.use("/api/categories", categoriesRouter);
@@ -3693,30 +3697,17 @@ app.use("/api/orders", OrderRouter);
 app.use("/api/address", addressRouter);
 app.use("/api/reviews", ReviewRouter);
 app.use("/api/seller", sellerRouter);
-app.use((req, res, next) => {
-  const localTime = (/* @__PURE__ */ new Date()).toLocaleString("en-BD", {
-    timeZone: "Asia/Dhaka",
-    hour12: false
-  });
-  return res.status(404).json({
+app.use((req, res) => {
+  res.status(404).json({
     success: false,
     message: "Route not found",
-    path: req.path,
-    method: req.method,
-    timestamp: localTime,
-    suggestion: "Please check the URL or API documentation"
+    path: req.path
   });
 });
 app.use((err, req, res, next) => {
-  const status2 = err.statusCode || 500;
-  const timestamp = (/* @__PURE__ */ new Date()).toLocaleString("en-BD", {
-    timeZone: "Asia/Dhaka",
-    hour12: false
-  });
-  return res.status(status2).json({
+  res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || "Internal Server Error",
-    timestamp,
     ...env.NODE_ENV === "development" && { stack: err.stack }
   });
 });

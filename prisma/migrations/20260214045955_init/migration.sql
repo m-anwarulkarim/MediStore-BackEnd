@@ -2,7 +2,7 @@
 CREATE TYPE "ROLE" AS ENUM ('CUSTOMER', 'SELLER', 'ADMIN');
 
 -- CreateEnum
-CREATE TYPE "ORDER_STATUS" AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+CREATE TYPE "ORDER_STATUS" AS ENUM ('PLACED', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
 
 -- CreateEnum
 CREATE TYPE "USER_STATUS" AS ENUM ('ACTIVE', 'BANNED', 'SUSPENDED');
@@ -16,7 +16,7 @@ CREATE TABLE "Order" (
     "orderNumber" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "addressId" TEXT NOT NULL,
-    "status" "ORDER_STATUS" NOT NULL DEFAULT 'PENDING',
+    "status" "ORDER_STATUS" NOT NULL DEFAULT 'PLACED',
     "paymentMethod" "PAYMENT_METHOD" NOT NULL DEFAULT 'CASH_ON_DELIVERY',
     "subtotal" DECIMAL(10,2) NOT NULL,
     "deliveryCharge" DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -121,13 +121,13 @@ CREATE TABLE "Address" (
     "userId" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
     "label" TEXT,
-    "phone" TEXT NOT NULL,
+    "phone" TEXT,
     "country" TEXT NOT NULL DEFAULT 'Bangladesh',
-    "city" TEXT NOT NULL,
-    "state" TEXT NOT NULL,
+    "city" TEXT,
+    "state" TEXT,
     "area" TEXT,
-    "postalCode" TEXT NOT NULL,
-    "addressLine" TEXT NOT NULL,
+    "postalCode" TEXT,
+    "addressLine" TEXT,
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,

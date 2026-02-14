@@ -15,8 +15,7 @@ This backend allows users to:
 
 ## 🚀 Live Project
 
-- **Backend URL:**  
-  https://backend-three-pi-86.vercel.app/
+- **Backend URL:**
 
 - **GitHub Repository:**  
   https://github.com/m-anwarulkarim/MediStore-BackEnd

@@ -17,40 +17,35 @@ import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
 
 const app = express();
 
-// ✅ Required for Render/Vercel proxy + secure cookies
 app.set("trust proxy", 1);
 
-// ✅ CORS (robust)
 const allowedOrigins = [
   env.FRONT_END_URL?.replace(/\/$/, ""),
   "https://medi-store-front-end.vercel.app",
   "http://localhost:3000",
 ].filter(Boolean) as string[];
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      const cleaned = origin.replace(/\/$/, "");
-      if (allowedOrigins.includes(cleaned)) return cb(null, true);
-      return cb(new Error(`CORS blocked origin: ${origin}`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+const corsMiddleware = cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    const cleaned = origin.replace(/\/$/, "");
+    if (allowedOrigins.includes(cleaned)) return cb(null, true);
+    return cb(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+});
 
-// ✅ Preflight
-app.options("/*", cors());
+app.use(corsMiddleware);
+
+app.options(/.*/, corsMiddleware);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ better-auth handler
-app.all("/api/auth/*", toNodeHandler(auth));
+app.all(/^\/api\/auth\/.*/, toNodeHandler(auth));
 
-// Health
 app.get("/", (_req: Request, res: Response) => {
   return res.status(200).json({
     success: true,
@@ -71,7 +66,6 @@ app.use("/api/address", addressRouter);
 app.use("/api/reviews", ReviewRouter);
 app.use("/api/seller", sellerRouter);
 
-// 404
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     success: false,
@@ -80,7 +74,6 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Global error
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err.statusCode || 500).json({
     success: false,

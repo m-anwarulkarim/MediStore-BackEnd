@@ -2,6 +2,7 @@ import { Router } from "express";
 import { sellerProfileController } from "./sellerProfile.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+import JwtGuard from "../../guard/jwt.guard";
 
 const router = Router();
 
@@ -9,6 +10,7 @@ const router = Router();
 router.get(
   "/all",
   authGuard(ROLE.ADMIN),
+  JwtGuard(),
   sellerProfileController.getAllSellers,
 );
 
@@ -16,6 +18,7 @@ router.get(
 router.post(
   "/profile",
   authGuard(ROLE.SELLER),
+  JwtGuard(),
   sellerProfileController.createSellerProfile,
 );
 
@@ -23,6 +26,7 @@ router.post(
 router.get(
   "/profile",
   authGuard(ROLE.SELLER),
+  JwtGuard(),
   sellerProfileController.getCurrentSellerProfile,
 );
 
@@ -30,6 +34,7 @@ router.get(
 router.put(
   "/profile",
   authGuard(ROLE.SELLER),
+  JwtGuard(),
   sellerProfileController.updateSellerProfile,
 );
 

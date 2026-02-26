@@ -3,9 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 import { env } from "./config/env";
-import { auth } from "./lib/auth";
 
-import { userRouter } from "./module/auth/auth.route";
 import { medicineRouter } from "./module/medicine/medicine.route";
 import { categoriesRouter } from "./module/categories/categories.route";
 import { sellerRouter } from "./module/SellerProfile/sellerProfile.route";
@@ -14,6 +12,8 @@ import { addressRouter } from "./module/Address/address.route";
 import { cartItemRouter } from "./module/cartItem/cartItem.route";
 import { ReviewRouter } from "./module/reviews/reviews.route";
 import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
+import { auth } from "./lib/auth";
+import { userRouter } from "./module/auth/auth.route";
 
 const app = express();
 
@@ -23,6 +23,8 @@ const allowedOrigins = [
   env.FRONT_END_URL?.replace(/\/$/, ""),
   "https://medi-store-front-end.vercel.app",
   "http://localhost:3000",
+  "https://new-taka.shop",
+  "https://www.new-taka.shop"
 ].filter(Boolean) as string[];
 
 const corsMiddleware = cors({

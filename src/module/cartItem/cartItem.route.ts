@@ -2,19 +2,31 @@ import { Router } from "express";
 import { cartItemController } from "./cartItem.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+import JwtGuard from "../../guard/jwt.guard";
 
 const router = Router();
 
 // Customer: Add to cart
-router.post("/", authGuard(ROLE.CUSTOMER), cartItemController.createCartItem);
+router.post(
+  "/",
+  authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
+  cartItemController.createCartItem,
+);
 
 // Customer: Get my cart
-router.get("/", authGuard(ROLE.CUSTOMER), cartItemController.getMyCart);
+router.get(
+  "/",
+  authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
+  cartItemController.getMyCart,
+);
 
 // Customer: Update cart item quantity
 router.put(
   "/:cartItemId",
   authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
   cartItemController.updateCartItemQuantity,
 );
 
@@ -22,6 +34,7 @@ router.put(
 router.delete(
   "/:cartItemId",
   authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
   cartItemController.deleteCartItem,
 );
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { CategoriesController } from "./categories.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+import JwtGuard from "../../guard/jwt.guard";
 
 const router = Router();
 
@@ -9,6 +10,7 @@ const router = Router();
 router.post(
   "/",
   authGuard(ROLE.ADMIN, ROLE.SELLER),
+  JwtGuard(),
   CategoriesController.createCategories,
 );
 
@@ -19,6 +21,7 @@ router.get("/", CategoriesController.getAllCategory);
 router.patch(
   "/:id",
   authGuard(ROLE.ADMIN, ROLE.SELLER),
+  JwtGuard(),
   CategoriesController.updateCategory,
 );
 
@@ -26,6 +29,7 @@ router.patch(
 router.delete(
   "/:id",
   authGuard(ROLE.ADMIN, ROLE.SELLER),
+  JwtGuard(),
   CategoriesController.deleteCategory,
 );
 

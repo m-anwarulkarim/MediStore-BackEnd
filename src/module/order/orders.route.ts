@@ -2,6 +2,7 @@ import { Router } from "express";
 import { orderController } from "./orders.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+import JwtGuard from "../../guard/jwt.guard";
 
 const router = Router();
 
@@ -9,6 +10,7 @@ const router = Router();
 router.get(
   "/admin/all",
   authGuard(ROLE.ADMIN),
+  JwtGuard(),
   orderController.getAllOrdersForAdmin,
 );
 
@@ -16,16 +18,23 @@ router.get(
 router.get(
   "/seller/all",
   authGuard(ROLE.SELLER),
+  JwtGuard(),
   orderController.getSellerOrders,
 );
 
 // Customer: Create order from cart
-router.post("/", authGuard(ROLE.CUSTOMER), orderController.createOrder);
+router.post(
+  "/",
+  authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
+  orderController.createOrder,
+);
 
 // Customer: Get my orders
 router.get(
   "/my-orders",
   authGuard(ROLE.CUSTOMER),
+  JwtGuard(),
   orderController.getUserOrders,
 );
 
@@ -33,6 +42,7 @@ router.get(
 router.get(
   "/:orderId",
   authGuard(ROLE.CUSTOMER, ROLE.SELLER, ROLE.ADMIN),
+  JwtGuard(),
   orderController.getOrderDetails,
 );
 
@@ -40,6 +50,7 @@ router.get(
 router.patch(
   "/:orderId/status",
   authGuard(ROLE.SELLER, ROLE.ADMIN),
+  JwtGuard(),
   orderController.updateOrderStatus,
 );
 

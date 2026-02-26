@@ -2,6 +2,7 @@ import { Router } from "express";
 import { addressController } from "./address.controller";
 import authGuard from "../../guard/auth.guard";
 import { ROLE } from "../../generated/prisma/enums";
+import JwtGuard from "../../guard/jwt.guard";
 
 const router = Router();
 
@@ -9,22 +10,23 @@ const router = Router();
 router.get(
   "/admin/all",
   authGuard(ROLE.ADMIN),
+  JwtGuard(),
   addressController.getAllAddresses,
 );
 
 // Customer/Seller: Create address
-router.post("/", authGuard(), addressController.createAddress);
+router.post("/", authGuard(), JwtGuard(), addressController.createAddress);
 
 // Customer/Seller: Get my addresses
-router.get("/my-addresses", authGuard(), addressController.getMyAddresses);
+router.get("/my-addresses", authGuard(), JwtGuard(), addressController.getMyAddresses);
 
 // Customer/Seller: Get single address
-router.get("/:id", authGuard(), addressController.getMyAddressById);
+router.get("/:id", authGuard(), JwtGuard(), addressController.getMyAddressById);
 
 // Customer/Seller: Update address
-router.put("/:id", authGuard(), addressController.updateAddress);
+router.put("/:id", authGuard(), JwtGuard(), addressController.updateAddress);
 
 // Customer/Seller: Delete address
-router.delete("/:id", authGuard(), addressController.deleteAddress);
+router.delete("/:id", authGuard(), JwtGuard(), addressController.deleteAddress);
 
 export const addressRouter = router;

@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: ab-app-container
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    networks:
+      - prod_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - app
+    networks:
+      - prod_net
+
+networks:
+  prod_net:
+    driver: bridge

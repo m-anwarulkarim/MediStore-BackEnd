@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { verifyAccessToken } from "../utils/jwt.js";
-import { USER_STATUS, } from "../../generated/prisma/enums.js";
-import type { ROLE } from "../generated/prisma/enums.js";
+import { USER_STATUS, type ROLE } from "../generated/prisma/enums.js";
 import { prisma } from "../lib/prisma.js";
 
 const JwtGuard = (...allowedRoles: ROLE[]) => {

@@ -14,6 +14,7 @@ import { ReviewRouter } from "./module/reviews/reviews.route";
 import { manufacturerRouter } from "./module/manufacturer/manufacturer.route";
 import { auth } from "./lib/auth";
 import { userRouter } from "./module/auth/auth.route";
+import { jwtRouter } from "./module/jwt/jwt.route";
 
 const app = express();
 
@@ -23,8 +24,8 @@ const allowedOrigins = [
   env.FRONT_END_URL?.replace(/\/$/, ""),
   "https://medi-store-front-end.vercel.app",
   "http://localhost:3000",
-  "https://new-taka.shop",
-  "https://www.new-taka.shop"
+  // "https://new-taka.shop",
+  // "https://www.new-taka.shop"
 ].filter(Boolean) as string[];
 
 const corsMiddleware = cors({
@@ -56,6 +57,7 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 // Routes
+app.use("/api/jwt", jwtRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/medicines", medicineRouter);
 app.use("/api/products", medicineRouter);
